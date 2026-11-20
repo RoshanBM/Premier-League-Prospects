@@ -37,6 +37,14 @@ python -m src.audit
 
 This writes `data/processed/audit_report.md`. It compares the data with what this project assumes about it, and lists duplicates and other anomalies.
 
+To match FPL players to Transfermarkt players:
+
+```powershell
+python -m src.matching
+```
+
+This writes `data/processed/fpl_tm_matches.csv` (one row per matched player), `data/processed/unmatched_report.csv` (everyone else, with the closest Transfermarkt names) and `data/processed/matching_report.md` (match rates and checks). Hand-made fixes go in `data/manual_matches.csv`: one row per FPL `code`, with a Transfermarkt `player_id` to force a match, or a blank one to force no match.
+
 ## Repository layout
 
 ```

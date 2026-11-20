@@ -21,9 +21,9 @@ from dataclasses import dataclass, field
 from itertools import combinations
 
 import pandas as pd
-from unidecode import unidecode
 
 from src import config
+from src.clean import fpl_team_names, latest_team_names, normalise_name
 from src.load_data import (
     detect_encoding,
     read_fpl_gameweeks,
@@ -57,7 +57,7 @@ EXPECTED_TM_SEASONS: tuple[int, int] = (2012, 2025)
 EXPECTED_TM_LAST_GAME: str = "2026-07-06"
 EXPECTED_TM_LAST_APPEARANCE: str = "2026-06-28"
 
-FPL_POSITIONS: dict[int, str] = {1: "GK", 2: "DEF", 3: "MID", 4: "FWD"}
+FPL_POSITIONS: dict[int, str] = config.FPL_POSITIONS
 DEFENSIVE_STATS: tuple[str, ...] = ("tackles", "clearances_blocks_interceptions", "recoveries")
 # Extra stats seen in the early gameweek files.
 EARLY_GAMEWEEK_STATS: tuple[str, ...] = (
@@ -193,28 +193,12 @@ def passed(ok: bool) -> str:
 
 def name_tokens(text: object) -> frozenset[str]:
     """Split a name into lower-case ASCII parts: "Heung-Min Son" -> {"heung", "min", "son"}."""
-    plain = unidecode(str(text)).lower()
-    return frozenset(part for part in re.split(r"[^a-z0-9]+", plain) if part)
+    return frozenset(normalise_name(text).split())
 
 
 def to_dates(values: pd.Series) -> pd.Series:
     """Parse ISO dates; anything unreadable becomes NaT."""
     return pd.to_datetime(values, errors="coerce", format="ISO8601")
-
-
-def describe_fpl_seasons(seasons: Iterable[str]) -> str:
-    """Describe FPL seasons as runs, e.g. "2016-17 to 2023-24, 2025-26"."""
-    present = set(seasons)
-    runs: list[list[str]] = []
-    in_run = False
-    for season in config.FPL_SEASONS:
-        if season in present:
-            if in_run:
-                runs[-1][1] = season
-            else:
-                runs.append([season, season])
-        in_run = season in present
-    return ", ".join(a if a == b else f"{a} to {b}" for a, b in runs) or "none"
 
 
 def describe_numbers(numbers: Iterable[int]) -> str:
@@ -266,30 +250,6 @@ def players_long(fpl: FplData) -> pd.DataFrame:
     return long
 
 
-def fpl_club_names(fpl: FplData) -> pd.DataFrame:
-    """Name each (season, team_code) from the club names in the gameweek files.
-
-    From 2020-21, merged_gw.csv has a club name on every row. A team_code's name
-    is the most common name across its players' rows, so a player who changed
-    club mid-season cannot mislabel a team.
-    """
-    rows = []
-    for season, gameweeks in fpl.gameweeks.items():
-        if "team" not in gameweeks.columns:
-            continue
-        codes = fpl.players[season][["id", "team_code"]].rename(columns={"id": "element"})
-        joined = gameweeks[["element", "team"]].merge(codes, on="element", how="inner")
-        for team_code, names in joined.groupby("team_code")["team"]:
-            rows.append({"season": season, "team_code": int(team_code), "club": names.mode().iat[0]})
-    return pd.DataFrame(rows)
-
-
-def club_lookup(clubs: pd.DataFrame) -> dict[int, str]:
-    """Map team_code to club name, using the latest season the code appears in."""
-    latest = clubs.sort_values("season").drop_duplicates("team_code", keep="last")
-    return dict(zip(latest["team_code"], latest["club"]))
-
-
 def club_name(lookup: dict[int, str], team_code: int) -> str:
     """Return a club name, or the bare code for clubs only seen before 2020-21."""
     return lookup.get(team_code, f"team_code {team_code}")
@@ -327,7 +287,7 @@ def spot_check(long: pd.DataFrame, lookup: dict[int, str]) -> pd.DataFrame:
             rows.append({"player": player, "seasons listed": "not found", "codes": ""})
             continue
         seasons = list(found["season"])
-        listed = describe_fpl_seasons(seasons)
+        listed = config.describe_seasons(seasons)
         rows.append(
             {
                 "player": player,
@@ -364,7 +324,7 @@ def same_name_different_codes(long: pd.DataFrame, lookup: dict[int, str]) -> pd.
                 {
                     "name": group["full_name"].iat[0],
                     "code": code,
-                    "seasons": describe_fpl_seasons(group["season"]),
+                    "seasons": config.describe_seasons(group["season"]),
                     "clubs": ", ".join(dict.fromkeys(club_name(lookup, c) for c in group["team_code"])),
                     "minutes": int(group["minutes"].sum()),
                     "verdict": verdict,
@@ -444,7 +404,7 @@ def club_code_consistency(clubs: pd.DataFrame) -> str:
     """Check that each team_code keeps one club name, and each club one team_code."""
     names_per_code = clubs.groupby("team_code")["club"].nunique()
     codes_per_name = clubs.groupby("club")["team_code"].nunique()
-    seasons = describe_fpl_seasons(clubs["season"])
+    seasons = config.describe_seasons(clubs["season"])
     if names_per_code.max() == 1 and codes_per_name.max() == 1:
         return (
             f"Club names come from the gameweek files, which have them for {seasons}. Across those "
@@ -644,7 +604,7 @@ def section_fpl_fields(fpl: FplData) -> Section:
             row[season] = f"{100 * (played[stat] != 0).mean():.0f}%"
         rows.append(row)
     section.text(
-        f"`merged_gw.csv` for {describe_fpl_seasons(early)} has stats that later files dropped. "
+        f"`merged_gw.csv` for {config.describe_seasons(early)} has stats that later files dropped. "
         "Each cell is the share of gameweek rows with minutes > 0 where the stat is not zero "
         "('-' means there is no such column). Non-zero shares show the columns hold real values, "
         "not placeholders. Their definitions are not documented, so they should not be compared "
@@ -663,7 +623,7 @@ def section_fpl_fields(fpl: FplData) -> Section:
             f"players_raw.csv has them only from {config.CURRENT_SEASON}"
             if in_players_raw_only_from_current else "players_raw.csv has them earlier too"
         )
-        evidence += f"; but merged_gw.csv for {describe_fpl_seasons(defensive_before)} has non-zero {', '.join(DEFENSIVE_STATS)}"
+        evidence += f"; but merged_gw.csv for {config.describe_seasons(defensive_before)} has non-zero {', '.join(DEFENSIVE_STATS)}"
     else:
         evidence = "no gameweek file before 2025-26 has non-zero values"
     section.claims.append(
@@ -680,7 +640,7 @@ def section_fpl_fields(fpl: FplData) -> Section:
     ]
     if early and early_only:
         section.highlights.append(
-            f"The gameweek files for {describe_fpl_seasons(early)} also have passing and chance-creation "
+            f"The gameweek files for {config.describe_seasons(early)} also have passing and chance-creation "
             f"stats ({', '.join(early_only)}) that no later season has."
         )
     return section
@@ -689,7 +649,7 @@ def section_fpl_fields(fpl: FplData) -> Section:
 def section_code_stability(fpl: FplData, long: pd.DataFrame, clubs: pd.DataFrame) -> Section:
     """Is FPL's code the same for the same player in every season?"""
     section = Section("FPL: is `code` stable across seasons?")
-    lookup = club_lookup(clubs)
+    lookup = latest_team_names(clubs)
     section.text(
         "`id` is renumbered every season, so multi-season histories need a key that stays the same. "
         "CLAUDE.md asks whether `code` is that key. The checks below approach it from several sides."
@@ -1008,7 +968,7 @@ def section_fpl_anomalies(fpl: FplData) -> Section:
         "Latin-1. Repeated gameweek rows are covered in the previous section."
     )
     section.table(table)
-    styles = table.groupby("gameweek name style", sort=False)["season"].agg(describe_fpl_seasons)
+    styles = table.groupby("gameweek name style", sort=False)["season"].agg(config.describe_seasons)
     if len(styles) > 1:
         section.highlights.append(
             "`merged_gw.csv` writes names differently by season: "
@@ -1432,7 +1392,7 @@ def main() -> int:
     tm = load_transfermarkt()
     print("Running the checks ...")
     long = players_long(fpl)
-    clubs = fpl_club_names(fpl)
+    clubs = fpl_team_names(fpl.players, fpl.gameweeks)
     sections = [
         section_fpl_overview(fpl),
         section_fpl_fields(fpl),

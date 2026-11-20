@@ -8,6 +8,7 @@ Run ``python -m src.config`` from the repository root to print a summary.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import date
 from pathlib import Path
 
@@ -67,6 +68,26 @@ FPL_SEASONS: tuple[str, ...] = tuple(
 )
 
 
+def describe_seasons(seasons: Iterable[str]) -> str:
+    """Describe FPL seasons as runs, e.g. "2016-17 to 2023-24, 2025-26" ("none" if empty)."""
+    present = set(seasons)
+    runs: list[list[str]] = []
+    previous_present = False
+    for season in FPL_SEASONS:
+        if season in present:
+            if previous_present:
+                runs[-1][1] = season
+            else:
+                runs.append([season, season])
+        previous_present = season in present
+    return ", ".join(a if a == b else f"{a} to {b}" for a, b in runs) or "none"
+
+
+# FPL element_type codes for players. 2024-25 also has element_type 5 for
+# managers, who are left out everywhere (see the audit report).
+FPL_POSITIONS: dict[int, str] = {1: "GK", 2: "DEF", 3: "MID", 4: "FWD"}
+
+
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
@@ -91,7 +112,9 @@ MANUAL_MATCHES_PATH: Path = DATA_DIR / "manual_matches.csv"
 # Pipeline outputs (all gitignored). File names carry the season, e.g. 2025_26.
 _SEASON_TAG: str = CURRENT_SEASON.replace("-", "_")
 AUDIT_REPORT_PATH: Path = PROCESSED_DIR / "audit_report.md"
+MATCHES_PATH: Path = PROCESSED_DIR / "fpl_tm_matches.csv"
 UNMATCHED_REPORT_PATH: Path = PROCESSED_DIR / "unmatched_report.csv"
+MATCHING_REPORT_PATH: Path = PROCESSED_DIR / "matching_report.md"
 PLAYER_SEASON_PATH: Path = PROCESSED_DIR / f"player_season_{_SEASON_TAG}.parquet"
 U21_CARDS_PATH: Path = PROCESSED_DIR / f"u21_cards_{_SEASON_TAG}.parquet"
 
@@ -124,6 +147,29 @@ PEAK_AGE_RANGE: tuple[int, int] = (24, 26)
 
 # Seed for anything random, so results can be reproduced.
 RANDOM_SEED: int = 42
+
+
+# ---------------------------------------------------------------------------
+# FPL to Transfermarkt matching (used by src/matching.py)
+# ---------------------------------------------------------------------------
+
+# Name scores run from 0 to 100 (see matching.name_score).
+# Rule 1: the birth dates are equal, so the name only has to agree.
+MATCH_NAME_SCORE_WITH_BIRTH_DATE: int = 70
+# Rule 2: no usable birth date, so the name must be close and the Premier
+# League minutes, season by season, must agree (0 = no overlap, 1 = identical).
+MATCH_NAME_SCORE_WITHOUT_BIRTH_DATE: int = 85
+MATCH_MIN_MINUTES_AGREEMENT: float = 0.8
+# Rule 3: a full name that only one Transfermarkt player has. No other player
+# may score this high, and the player must be this old (years) in their first
+# Premier League season.
+MATCH_UNIQUE_NAME_RUNNER_UP: int = 90
+MATCH_PLAUSIBLE_AGE: tuple[int, int] = (15, 40)
+# When several candidates pass, a tie is only broken by a clear margin.
+MATCH_DECISIVE_NAME_MARGIN: int = 5
+MATCH_DECISIVE_MINUTES_MARGIN: float = 0.2
+# A loose name score, used only to shortlist rule-2 candidates quickly.
+MATCH_SHORTLIST_SCORE: int = 70
 
 
 # ---------------------------------------------------------------------------

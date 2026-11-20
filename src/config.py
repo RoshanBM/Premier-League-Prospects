@@ -171,8 +171,17 @@ def transfermarkt_url(table: str) -> str:
 
 
 def transfermarkt_raw_path(table: str) -> Path:
-    """Return where a Transfermarkt table is stored locally."""
+    """Return where a downloaded Transfermarkt table is stored (``{table}.csv.gz``)."""
     return TRANSFERMARKT_RAW_DIR / f"{table}.csv.gz"
+
+
+def transfermarkt_manual_path(table: str) -> Path:
+    """Return the accepted name for a Transfermarkt table copied in by hand.
+
+    A manual download from Kaggle may give plain ``{table}.csv`` files rather
+    than ``{table}.csv.gz``. Both are accepted.
+    """
+    return TRANSFERMARKT_RAW_DIR / f"{table}.csv"
 
 
 # ---------------------------------------------------------------------------

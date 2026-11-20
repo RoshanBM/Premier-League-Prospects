@@ -20,6 +20,15 @@ Run everything from the repository root. To check the configuration:
 python -m src.config
 ```
 
+## Getting the data
+
+```powershell
+python -m src.load_data           # downloads about 108 MB; files already present are skipped
+python -m src.load_data --force   # downloads everything again
+```
+
+This fetches FPL `players_raw.csv` and `gws/merged_gw.csv` for 2016-17 to 2025-26, plus six Transfermarkt tables, into `data/raw/`. Use `--source fpl` or `--source transfermarkt` to fetch one source only. Each file is recorded in `data/raw/manifest.json` with its source URL, download time, size and SHA-256. If the Transfermarkt download fails, the script prints instructions for getting the same tables from Kaggle by hand.
+
 ## Repository layout
 
 ```

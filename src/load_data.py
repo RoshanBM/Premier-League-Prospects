@@ -1,4 +1,4 @@
-"""Download the raw FPL and Transfermarkt files into data/raw/.
+"""Download the raw FPL and Transfermarkt files into data/raw/, and read them back.
 
 What it downloads:
 - FPL: ``players_raw.csv`` and ``gws/merged_gw.csv`` for every season in
@@ -22,6 +22,10 @@ How it behaves:
 - ``data/raw/manifest.json`` records every file (source URL, time in UTC, size
   in bytes and SHA-256). It is saved after each file and at the end of a run.
 
+Reading the files back: ``read_fpl_players``, ``read_fpl_gameweeks`` and
+``read_transfermarkt`` return the raw tables unchanged, decoded with the right
+text encoding, for the audit and the later pipeline steps.
+
 Usage, from the repository root:
     python -m src.load_data                          # everything
     python -m src.load_data --source fpl             # FPL only
@@ -41,6 +45,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pandas as pd
 import requests
 
 from src import config
@@ -407,6 +412,55 @@ def fetch_all(
         print(f"{label}: downloaded ({format_size(record.size_bytes)})")
         result.downloaded += 1
     return result
+
+
+# ---------------------------------------------------------------------------
+# Reading the raw files back
+# ---------------------------------------------------------------------------
+
+def detect_encoding(path: Path) -> str:
+    """Return ``"utf-8"`` if the whole file is valid UTF-8, otherwise ``"latin-1"``.
+
+    The FPL gameweek files for 2016-17 to 2018-19 are not UTF-8: accented
+    letters are stored as single Latin-1 bytes. Latin-1 can decode any byte,
+    so it is a safe fallback, and the audit reports which files needed it.
+    """
+    try:
+        path.read_bytes().decode("utf-8")
+    except UnicodeDecodeError:
+        return "latin-1"
+    return "utf-8"
+
+
+def read_raw_csv(path: Path) -> pd.DataFrame:
+    """Read a raw CSV file exactly as it is, in its own text encoding."""
+    return pd.read_csv(path, encoding=detect_encoding(path), low_memory=False)
+
+
+def read_fpl_players(season: str) -> pd.DataFrame:
+    """Read one season's ``players_raw.csv``: one row per player in the FPL game."""
+    return read_raw_csv(config.fpl_raw_path(season, "players_raw.csv"))
+
+
+def read_fpl_gameweeks(season: str) -> pd.DataFrame:
+    """Read one season's ``gws/merged_gw.csv``: one row per player per fixture."""
+    return read_raw_csv(config.fpl_raw_path(season, "gws/merged_gw.csv"))
+
+
+def find_transfermarkt_file(table: str) -> Path:
+    """Return the local file for a Transfermarkt table, preferring the ``.csv.gz`` download."""
+    for path in (config.transfermarkt_raw_path(table), config.transfermarkt_manual_path(table)):
+        if path.exists():
+            return path
+    raise FileNotFoundError(
+        f"No local copy of the Transfermarkt table {table!r}. "
+        "Run: python -m src.load_data --source transfermarkt"
+    )
+
+
+def read_transfermarkt(table: str) -> pd.DataFrame:
+    """Read one Transfermarkt table exactly as it is (pandas unpacks ``.csv.gz`` itself)."""
+    return pd.read_csv(find_transfermarkt_file(table), low_memory=False)
 
 
 # ---------------------------------------------------------------------------

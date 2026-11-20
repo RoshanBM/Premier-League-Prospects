@@ -1,0 +1,32 @@
+# Pinned versions for Python 3.14, resolved and smoke-tested on Windows on
+# 20 Nov 2026. Install into a virtual environment with:
+#   pip install -r requirements.txt
+
+# Data handling
+pandas==3.1.1
+numpy==2.5.5
+pyarrow==26.0.1          # parquet files for processed data
+
+# Downloading the raw data
+requests==2.34.2
+
+# FPL to Transfermarkt player matching
+rapidfuzz==3.14.6        # fuzzy name matching
+Unidecode==1.4.0         # strips accents from names before matching
+
+# Modelling
+statsmodels==0.15.0      # mixed-effects models (MixedLM)
+scikit-learn==1.9.1      # scaling and nearest neighbours for similar players
+
+# App and charts
+streamlit==1.67.0
+plotly==7.1.0
+
+# Reports and tests
+tabulate==0.10.0         # markdown tables in the audit report (pandas to_markdown)
+pytest==9.2.0
+
+# Sub-dependency pinned on purpose. formulaic (required by statsmodels) allows
+# pre-releases of wrapt on Python 3.13 and later, so without this pin pip
+# installs a development build. 2.5.2 is the latest stable release.
+wrapt==2.5.2

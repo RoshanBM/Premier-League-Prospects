@@ -1,0 +1,22 @@
+# Data: raw and processed data are never committed (licence terms, see README).
+# The pattern is "data/*" rather than "data/" on purpose: git cannot re-include
+# a file if its parent folder is ignored, so "data/" would also hide the one
+# file we do want to commit, the hand-made matching fixes below.
+data/*
+!data/manual_matches.csv
+
+# Python environment and caches
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Secrets and machine-specific settings
+.env
+.streamlit/secrets.toml
+.claude/settings.local.json
+
+# Operating system files
+.DS_Store
+Thumbs.db

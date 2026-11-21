@@ -24,10 +24,12 @@ Writes:
 
 Run from the repository root, after python -m src.matching:
     python -m src.features
+    python -m src.features --show Diouf Estêvão Kroupi   # also print these players' cards
 """
 
 from __future__ import annotations
 
+import argparse
 import sys
 from dataclasses import dataclass
 
@@ -35,6 +37,7 @@ import numpy as np
 import pandas as pd
 
 from src import config
+from src.clean import normalise_name
 from src.cohort import current_season_players
 from src.load_data import read_fpl_players
 
@@ -73,6 +76,18 @@ class Attribute:
         is_goalkeeper = positions == "GK"
         return is_goalkeeper if self.goalkeepers_only else ~is_goalkeeper
 
+
+MEASURE_LABELS: dict[str, str] = {
+    "goals": "goals",
+    "goals_minus_xg": "goals minus xG",
+    "xg": "xG",
+    "xa": "xA",
+    "assists": "assists",
+    "defensive_actions": "tackles + clearances/blocks/interceptions",
+    "recoveries": "recoveries",
+    "saves": "saves",
+    "goals_prevented": "xGC minus goals conceded",
+}
 
 ATTRIBUTES: tuple[Attribute, ...] = (
     Attribute("Finishing", ("goals", "goals_minus_xg")),
@@ -219,8 +234,74 @@ def attribute_spread(player_season: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def main() -> int:
-    """Build both tables, write them and print the checks."""
+# ---------------------------------------------------------------------------
+# Printing a card
+# ---------------------------------------------------------------------------
+
+def find_players(player_season: pd.DataFrame, query: str) -> pd.DataFrame:
+    """Players whose FPL web name or full name matches the query (accents and case ignored)."""
+    wanted = normalise_name(query)
+    web = player_season["web_name"].map(normalise_name)
+    full = player_season["name"].map(normalise_name)
+    words = set(wanted.split())
+    hits = (web == wanted) | web.str.contains(wanted, regex=False) | full.map(lambda name: words <= set(name.split()))
+    return player_season[hits]
+
+
+def format_card(player: pd.Series, player_season: pd.DataFrame) -> str:
+    """A player's card as text: attributes, and the per-90 numbers behind each one."""
+    position = player["position"]
+    pool = player_season[player_season["has_attributes"] & (player_season["position"] == position)]
+    born = f"{player['birth_date']:%d %b %Y}" if pd.notna(player["birth_date"]) else "unknown"
+    lines = [
+        f"{player['name']} ({player['web_name']}), {position}, {player['club']}",
+        f"Born {born} (source: {player['birth_date_source']}), age {player['age_on_cutoff']} on "
+        f"{config.U21_CUTOFF_DATE:%d %b %Y}; {'U21' if player['u21'] else 'not U21'}",
+        f"{config.CURRENT_SEASON}: {player['minutes']:,} minutes, {player['starts']} starts",
+    ]
+    if not player["has_attributes"]:
+        lines.append(f"Fewer than {config.MIN_MINUTES_FOR_PER90} minutes, so no attributes.")
+        return "\n".join(lines)
+    lines.append(f"Compared with the {len(pool)} {position} players with {config.MIN_MINUTES_FOR_PER90}+ minutes.")
+    lines.append("")
+    lines.append(f"  {'Attribute':<16}{'Score':>5}   Inputs per 90: player (median of group, player's percentile)")
+    for attribute in ATTRIBUTES:
+        if attribute.goalkeepers_only != (position == "GK"):
+            continue
+        inputs = [
+            f"{MEASURE_LABELS[m]} {player[f'{m}_per90']:.2f} "
+            f"({pool[f'{m}_per90'].median():.2f}, {100 * player[f'{m}_pct']:.0f})"
+            for m in attribute.inputs
+        ]
+        lines.append(f"  {attribute.name:<16}{int(player[attribute.column]):>5}   " + "; ".join(inputs))
+    if position == "GK":
+        totals = (f"{player['saves']} saves, {player['goals_conceded']} goals conceded, "
+                  f"{player['expected_goals_conceded']:.1f} xGC")
+    else:
+        totals = (
+            f"{player['goals_scored']} goals, {player['assists']} assists, {player['expected_goals']:.1f} xG, "
+            f"{player['expected_assists']:.1f} xA, {player['tackles']} tackles, "
+            f"{player['clearances_blocks_interceptions']} clearances/blocks/interceptions, "
+            f"{player['recoveries']} recoveries"
+        )
+    lines.append("")
+    lines.append(f"  Season totals: {totals}")
+    return "\n".join(lines)
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Read the command-line options."""
+    parser = argparse.ArgumentParser(description="Build per-90 stats and 1 to 20 attributes for the current season.")
+    parser.add_argument(
+        "--show", nargs="+", metavar="NAME",
+        help="print the card of each named player (FPL web name or full name; accents optional)",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Build both tables, write them, and print the checks or the requested cards."""
+    args = parse_args(argv)
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(errors="replace")  # player names may not fit the console's encoding
     config.ensure_directories()
@@ -228,6 +309,15 @@ def main() -> int:
     cards = build_u21_cards(player_season)
     player_season.to_parquet(config.PLAYER_SEASON_PATH, index=False)
     cards.to_parquet(config.U21_CARDS_PATH, index=False)
+
+    if args.show:
+        for query in args.show:
+            found = find_players(player_season, query)
+            if found.empty:
+                print(f"\nNo player in {config.CURRENT_SEASON} matches '{query}'.")
+            for _, player in found.iterrows():
+                print("\n" + "=" * 100 + "\n" + format_card(player, player_season))
+        return 0
 
     pd.set_option("display.width", 220)
     print(f"Comparison pools ({config.MIN_MINUTES_FOR_PER90}+ minutes):")
@@ -244,3 +334,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

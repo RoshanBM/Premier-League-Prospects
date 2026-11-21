@@ -59,7 +59,11 @@ To work out per-90 stats and attributes:
 python -m src.features
 ```
 
-This writes `data/processed/player_season_2025_26.parquet` (every player in the 2025/26 season) and `data/processed/u21_cards_2025_26.parquet` (the U21 cohort).
+This writes `data/processed/player_season_2025_26.parquet` (every player in the 2025/26 season) and `data/processed/u21_cards_2025_26.parquet` (the U21 cohort). To print players' cards, with the numbers behind each attribute:
+
+```powershell
+python -m src.features --show Diouf Estêvão Kroupi
+```
 
 ## Running the tests
 

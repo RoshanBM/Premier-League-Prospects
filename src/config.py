@@ -111,11 +111,18 @@ MANUAL_MATCHES_PATH: Path = DATA_DIR / "manual_matches.csv"
 
 # Pipeline outputs (all gitignored). File names carry the season, e.g. 2025_26.
 _SEASON_TAG: str = CURRENT_SEASON.replace("-", "_")
+
+
+def u21_cohort_path(season: str) -> Path:
+    """Where the U21 cohort of a season is written, e.g. u21_cohort_2018_19.csv."""
+    return PROCESSED_DIR / f"u21_cohort_{season.replace('-', '_')}.csv"
+
+
 AUDIT_REPORT_PATH: Path = PROCESSED_DIR / "audit_report.md"
 MATCHES_PATH: Path = PROCESSED_DIR / "fpl_tm_matches.csv"
 UNMATCHED_REPORT_PATH: Path = PROCESSED_DIR / "unmatched_report.csv"
 MATCHING_REPORT_PATH: Path = PROCESSED_DIR / "matching_report.md"
-U21_COHORT_PATH: Path = PROCESSED_DIR / f"u21_cohort_{_SEASON_TAG}.csv"
+U21_COHORT_PATH: Path = u21_cohort_path(CURRENT_SEASON)
 PLAYER_SEASON_PATH: Path = PROCESSED_DIR / f"player_season_{_SEASON_TAG}.parquet"
 U21_CARDS_PATH: Path = PROCESSED_DIR / f"u21_cards_{_SEASON_TAG}.parquet"
 
@@ -128,11 +135,23 @@ U21_CARDS_PATH: Path = PROCESSED_DIR / f"u21_cards_{_SEASON_TAG}.parquet"
 # many PL minutes. Players below it are listed separately without attributes.
 MIN_MINUTES_FOR_PER90: int = 450
 
-# U21 means aged under 21 on the cut-off date. A player born on 1 Sep 2004
-# turns 21 on the cut-off date itself, so they are not U21; a player born on
-# 2 Sep 2004 is.
-U21_CUTOFF_DATE: date = date(2025, 9, 1)
+# U21 means aged under 21 on the cut-off date, which is 1 September of the
+# season's first year. A player born on 1 Sep 2004 turns 21 on the 2025-26
+# cut-off date itself, so they are not U21; a player born on 2 Sep 2004 is.
 U21_AGE_LIMIT: int = 21
+U21_CUTOFF_MONTH: int = 9
+U21_CUTOFF_DAY: int = 1
+
+
+def u21_cutoff(season: str) -> date:
+    """The U21 cut-off date of a season: 1 September of its first year.
+
+    Example: ``u21_cutoff("2018-19")`` returns ``date(2018, 9, 1)``.
+    """
+    return date(season_start_year(season), U21_CUTOFF_MONTH, U21_CUTOFF_DAY)
+
+
+U21_CUTOFF_DATE: date = u21_cutoff(CURRENT_SEASON)  # 1 Sep 2025
 
 # Primary trajectory outcome: minutes share = PL minutes / (38 x 90).
 MATCHES_PER_SEASON: int = 38

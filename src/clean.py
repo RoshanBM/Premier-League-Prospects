@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable, Mapping
+from datetime import date
 
 import pandas as pd
 from unidecode import unidecode
@@ -35,6 +36,24 @@ def normalise_name(text: object) -> str:
 def to_date(values: pd.Series) -> pd.Series:
     """Parse ISO dates to whole-second datetimes, so dates from both sources compare equal."""
     return pd.to_datetime(values, errors="coerce", format="ISO8601").astype("datetime64[s]")
+
+
+def age_on(birth_dates: pd.Series, on: date) -> pd.Series:
+    """Age in completed years on a given date; a missing birth date gives a missing age.
+
+    Someone born on 1 Sep 2004 is 21 on 1 Sep 2025 and 20 the day before.
+    Months and days are compared directly, so 29 February birthdays need no
+    special case.
+    """
+    born = pd.to_datetime(birth_dates)
+    had_birthday = (born.dt.month < on.month) | ((born.dt.month == on.month) & (born.dt.day <= on.day))
+    years = on.year - born.dt.year - (~had_birthday).astype(int)
+    return years.where(born.notna()).astype("Int64")
+
+
+def exact_age(birth_dates: pd.Series, on: date) -> pd.Series:
+    """Age in years with decimals on a given date (days divided by 365.25)."""
+    return (pd.Timestamp(on) - pd.to_datetime(birth_dates)).dt.days / 365.25
 
 
 # ---------------------------------------------------------------------------

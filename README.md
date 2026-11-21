@@ -45,6 +45,14 @@ python -m src.matching
 
 This writes `data/processed/fpl_tm_matches.csv` (one row per matched player), `data/processed/unmatched_report.csv` (everyone else, with the closest Transfermarkt names) and `data/processed/matching_report.md` (match rates and checks). Hand-made fixes go in `data/manual_matches.csv`: one row per FPL `code`, with a Transfermarkt `player_id` to force a match, or a blank one to force no match.
 
+To build the 2025/26 U21 cohort (players aged under 21 on 1 September 2025 who played Premier League minutes that season):
+
+```powershell
+python -m src.cohort
+```
+
+This writes `data/processed/u21_cohort_2025_26.csv` and prints the counts. Age is in completed years, so a player born on 1 September 2004 is 21 on the cut-off date and not in the cohort.
+
 ## Repository layout
 
 ```

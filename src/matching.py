@@ -60,6 +60,7 @@ from src.clean import (
     fpl_team_names,
     latest_team_names,
     normalise_name,
+    to_date,
     transfermarkt_players,
     transfermarkt_season_minutes,
 )
@@ -932,6 +933,19 @@ def build_report(result: MatchingResult) -> str:
         "",
     ]
     return "\n".join(lines)
+
+
+def read_matches() -> pd.DataFrame:
+    """Read the match table this module writes, with dates parsed.
+
+    Raises FileNotFoundError with the command to run if it does not exist yet.
+    """
+    if not config.MATCHES_PATH.exists():
+        raise FileNotFoundError(f"{config.MATCHES_PATH} not found. Run: python -m src.matching")
+    matches = pd.read_csv(config.MATCHES_PATH, dtype={"fpl_code": "int64", "tm_player_id": "int64"})
+    for column in ("fpl_birth_date", "tm_birth_date"):
+        matches[column] = to_date(matches[column])
+    return matches
 
 
 def main() -> int:

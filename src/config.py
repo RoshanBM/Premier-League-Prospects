@@ -115,6 +115,7 @@ AUDIT_REPORT_PATH: Path = PROCESSED_DIR / "audit_report.md"
 MATCHES_PATH: Path = PROCESSED_DIR / "fpl_tm_matches.csv"
 UNMATCHED_REPORT_PATH: Path = PROCESSED_DIR / "unmatched_report.csv"
 MATCHING_REPORT_PATH: Path = PROCESSED_DIR / "matching_report.md"
+U21_COHORT_PATH: Path = PROCESSED_DIR / f"u21_cohort_{_SEASON_TAG}.csv"
 PLAYER_SEASON_PATH: Path = PROCESSED_DIR / f"player_season_{_SEASON_TAG}.parquet"
 U21_CARDS_PATH: Path = PROCESSED_DIR / f"u21_cards_{_SEASON_TAG}.parquet"
 

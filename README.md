@@ -53,11 +53,56 @@ python -m src.cohort
 
 This writes `data/processed/u21_cohort_2025_26.csv` and prints the counts. Age is in completed years, so a player born on 1 September 2004 is 21 on the cut-off date and not in the cohort.
 
+To work out per-90 stats and attributes:
+
+```powershell
+python -m src.features
+```
+
+This writes `data/processed/player_season_2025_26.parquet` (every player in the 2025/26 season) and `data/processed/u21_cards_2025_26.parquet` (the U21 cohort).
+
+## Running the tests
+
+```powershell
+python -m pytest
+```
+
+The tests cover the per-90 arithmetic, the 1 to 20 mapping (its bounds, that it never goes down as a percentile rises, and exact boundaries), the U21 age rule around 1 September 2025, and that there is one row per player per season. Tests that check the real data files skip themselves if the data has not been downloaded and processed yet.
+
+## How the attributes are calculated
+
+Every player with at least 450 Premier League minutes in 2025/26 gets Football Manager-style attributes on a 1 to 20 scale. Players with fewer minutes are listed without attributes, because per-90 numbers from a handful of appearances are too noisy.
+
+| Attribute | Who gets it | Inputs (per 90 minutes) |
+| --- | --- | --- |
+| Finishing | outfield players | goals; goals minus expected goals (xG) |
+| Shot Threat | outfield players | expected goals (xG) |
+| Chance Creation | outfield players | expected assists (xA); assists |
+| Defending | outfield players | tackles plus clearances, blocks and interceptions |
+| Ball Recovery | outfield players | recoveries |
+| Goalkeeping | goalkeepers | saves; expected goals conceded minus goals conceded |
+
+How a season total becomes an attribute:
+
+1. **Per 90:** the season total divided by minutes played, times 90.
+2. **Percentile within position:** the player is compared with every Premier League player in the same FPL position (goalkeeper, defender, midfielder or forward) who also played at least 450 minutes, not only with under-21s. Ratings are therefore absolute, as in Football Manager: a 15 means better than about 70% of the league's players in that position this season. The percentile is the share of the group below the player plus half the share level with them, so players with the same number get the same percentile. In 2025/26 the groups are 28 goalkeepers, 147 defenders, 181 midfielders and 44 forwards.
+3. **Attribute:** 1 + (percentile x 20, rounded down), capped at 20. The bottom 5% of a group get 1 and the top 5% get 20.
+4. **Two inputs:** the attribute uses the average of the two percentiles.
+
+Limits of this approach:
+
+- Passing, progression, dribbling, aerial ability and pressing are not in any open data source for recent Premier League seasons, so there are no attributes for them.
+- FPL has only four positions, so a holding midfielder is compared with attacking midfielders, and a winger that FPL lists as a forward is compared with strikers.
+- Attributes are relative to this season's Premier League players, and 450 minutes (five full matches) is still a small sample.
+- Saves per 90 partly reflects how busy a goalkeeper is, not only how good.
+- Many players share the same small totals (most defenders score no goals), which bunches them on the same attribute value.
+
 ## Repository layout
 
 ```
 ├── README.md
 ├── requirements.txt
+├── pytest.ini               test settings
 ├── data/                    gitignored, apart from manual_matches.csv
 │   ├── raw/                 downloaded files (fpl/, transfermarkt/, statsbomb/)
 │   ├── processed/           pipeline outputs
@@ -68,6 +113,7 @@ This writes `data/processed/u21_cohort_2025_26.csv` and prints the counts. Age i
 │   ├── audit.py             data-quality checks
 │   ├── clean.py             shared cleaning steps
 │   ├── matching.py          FPL to Transfermarkt player matching
+│   ├── cohort.py            the 2025/26 U21 cohort
 │   ├── features.py          per-90 stats, percentiles and attributes
 │   ├── ability.py           Current and Potential Ability
 │   ├── trajectory.py        mixed-effects age-curve model

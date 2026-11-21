@@ -45,13 +45,14 @@ python -m src.matching
 
 This writes `data/processed/fpl_tm_matches.csv` (one row per matched player), `data/processed/unmatched_report.csv` (everyone else, with the closest Transfermarkt names) and `data/processed/matching_report.md` (match rates and checks). Hand-made fixes go in `data/manual_matches.csv`: one row per FPL `code`, with a Transfermarkt `player_id` to force a match, or a blank one to force no match.
 
-To build the 2025/26 U21 cohort (players aged under 21 on 1 September 2025 who played Premier League minutes that season):
+To build the U21 cohort of a season (players aged under 21 on 1 September at the start of the season who played Premier League minutes in it):
 
 ```powershell
-python -m src.cohort
+python -m src.cohort                    # 2025/26: under 21 on 1 September 2025
+python -m src.cohort --season 2018-19   # an earlier season: under 21 on 1 September 2018
 ```
 
-This writes `data/processed/u21_cohort_2025_26.csv` and prints the counts. Age is in completed years, so a player born on 1 September 2004 is 21 on the cut-off date and not in the cohort.
+This writes `data/processed/u21_cohort_2025_26.csv` (or the other season's file) and prints the counts. Age is in completed years, so a player born on 1 September 2004 is 21 on the 2025/26 cut-off date and not in the cohort. `--cutoff YYYY-MM-DD` measures age on a different date. For an earlier season, minutes and positions come from that season's files only. Birth dates come from later files where needed, which is safe because a birth date does not change.
 
 To work out per-90 stats and attributes:
 
@@ -104,6 +105,7 @@ Limits of this approach:
 ## Repository layout
 
 ```
+├── CLAUDE.md                the project brief for Claude Code
 ├── README.md
 ├── requirements.txt
 ├── pytest.ini               test settings
@@ -117,7 +119,7 @@ Limits of this approach:
 │   ├── audit.py             data-quality checks
 │   ├── clean.py             shared cleaning steps
 │   ├── matching.py          FPL to Transfermarkt player matching
-│   ├── cohort.py            the 2025/26 U21 cohort
+│   ├── cohort.py            the U21 cohort of any season (who is in the sample)
 │   ├── features.py          per-90 stats, percentiles and attributes
 │   ├── ability.py           Current and Potential Ability
 │   ├── trajectory.py        mixed-effects age-curve model

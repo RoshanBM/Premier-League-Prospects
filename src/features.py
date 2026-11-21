@@ -38,7 +38,7 @@ import pandas as pd
 
 from src import config
 from src.clean import normalise_name
-from src.cohort import current_season_players
+from src.cohort import in_cohort, season_players
 from src.load_data import read_fpl_players
 
 # FPL season totals kept in the output, under their FPL names.
@@ -54,7 +54,7 @@ RAW_STATS: tuple[str, ...] = (
 FLOAT_TOLERANCE: float = 1e-9
 IDENTITY_COLUMNS: list[str] = [
     "fpl_code", "name", "web_name", "position", "club", "birth_date", "birth_date_source",
-    "age_on_cutoff", "exact_age_on_cutoff", "u21", "tm_player_id", "minutes", "starts", "has_attributes",
+    "age_on_cutoff", "exact_age_on_cutoff", "u21", "tm_player_id", "minutes", "starts", "enough_minutes",
 ]
 
 
@@ -182,7 +182,7 @@ def add_features(players: pd.DataFrame) -> pd.DataFrame:
 
 def build_player_season() -> pd.DataFrame:
     """Every player in the current season: identity, totals, per-90 values, percentiles and attributes."""
-    players = current_season_players()
+    players = season_players(config.CURRENT_SEASON, config.U21_CUTOFF_DATE)
     raw = read_fpl_players(config.CURRENT_SEASON)[["code", *RAW_STATS]].rename(columns={"code": "fpl_code"})
     players = players.merge(raw, on="fpl_code", how="left", validate="one_to_one")
     featured = add_features(players)
@@ -192,9 +192,9 @@ def build_player_season() -> pd.DataFrame:
 
 
 def build_u21_cards(player_season: pd.DataFrame) -> pd.DataFrame:
-    """The U21 cohort (U21 with any PL minutes); attributes only for those with enough minutes."""
-    cohort = player_season[player_season["u21"].fillna(False).astype(bool) & (player_season["minutes"] > 0)]
-    return cohort.sort_values(["has_attributes", "minutes"], ascending=False, ignore_index=True)
+    """The U21 cohort (U21 with any PL minutes, as defined in cohort.py); attributes only for those with enough minutes."""
+    cohort = player_season[in_cohort(player_season)]
+    return cohort.sort_values(["enough_minutes", "minutes"], ascending=False, ignore_index=True)
 
 
 # ---------------------------------------------------------------------------
@@ -203,7 +203,7 @@ def build_u21_cards(player_season: pd.DataFrame) -> pd.DataFrame:
 
 def pool_sizes(player_season: pd.DataFrame) -> pd.DataFrame:
     """Players with enough minutes at each position: the comparison pools."""
-    pools = player_season[player_season["has_attributes"]]
+    pools = player_season[player_season["enough_minutes"]]
     return pools.groupby("position").size().reindex(list(config.FPL_POSITIONS.values())).rename("pool").reset_index()
 
 
@@ -215,7 +215,7 @@ def attribute_spread(player_season: pd.DataFrame) -> pd.DataFrame:
     no goals).
     """
     rows = []
-    pools = player_season[player_season["has_attributes"]]
+    pools = player_season[player_season["enough_minutes"]]
     for attribute in ATTRIBUTES:
         for position, group in pools[attribute.applies_to(pools["position"])].groupby("position"):
             values = group[attribute.column].dropna()
@@ -251,7 +251,7 @@ def find_players(player_season: pd.DataFrame, query: str) -> pd.DataFrame:
 def format_card(player: pd.Series, player_season: pd.DataFrame) -> str:
     """A player's card as text: attributes, and the per-90 numbers behind each one."""
     position = player["position"]
-    pool = player_season[player_season["has_attributes"] & (player_season["position"] == position)]
+    pool = player_season[player_season["enough_minutes"] & (player_season["position"] == position)]
     born = f"{player['birth_date']:%d %b %Y}" if pd.notna(player["birth_date"]) else "unknown"
     lines = [
         f"{player['name']} ({player['web_name']}), {position}, {player['club']}",
@@ -259,7 +259,7 @@ def format_card(player: pd.Series, player_season: pd.DataFrame) -> str:
         f"{config.U21_CUTOFF_DATE:%d %b %Y}; {'U21' if player['u21'] else 'not U21'}",
         f"{config.CURRENT_SEASON}: {player['minutes']:,} minutes, {player['starts']} starts",
     ]
-    if not player["has_attributes"]:
+    if not player["enough_minutes"]:
         lines.append(f"Fewer than {config.MIN_MINUTES_FOR_PER90} minutes, so no attributes.")
         return "\n".join(lines)
     lines.append(f"Compared with the {len(pool)} {position} players with {config.MIN_MINUTES_FOR_PER90}+ minutes.")
@@ -325,8 +325,8 @@ def main(argv: list[str] | None = None) -> int:
     print("\nAttribute spread within the pools:")
     print(attribute_spread(player_season).to_string(index=False))
     shown = ["web_name", "position", "club", "age_on_cutoff", "minutes", *[a.column for a in ATTRIBUTES]]
-    print(f"\nU21 cards with attributes ({int(cards['has_attributes'].sum())} of {len(cards)}):")
-    print(cards[cards["has_attributes"]][shown].to_string(index=False))
+    print(f"\nU21 cards with attributes ({int(cards['enough_minutes'].sum())} of {len(cards)}):")
+    print(cards[cards["enough_minutes"]][shown].to_string(index=False))
     print(f"\nPlayer-season table: {config.PLAYER_SEASON_PATH} ({len(player_season)} rows)")
     print(f"U21 cards:           {config.U21_CARDS_PATH} ({len(cards)} rows)")
     return 0

@@ -126,6 +126,27 @@ U21_COHORT_PATH: Path = u21_cohort_path(CURRENT_SEASON)
 PLAYER_SEASON_PATH: Path = PROCESSED_DIR / f"player_season_{_SEASON_TAG}.parquet"
 U21_CARDS_PATH: Path = PROCESSED_DIR / f"u21_cards_{_SEASON_TAG}.parquet"
 
+# Trajectories, ability, backtest and similar players.
+PANEL_PATH: Path = PROCESSED_DIR / "player_season_panel.parquet"
+TRAJECTORY_SUMMARY_PATH: Path = PROCESSED_DIR / "trajectory_model_summary.txt"
+# The fitted model's numbers (fixed effects, covariances), so later steps can
+# project without fitting again.
+TRAJECTORY_PARAMS_PATH: Path = PROCESSED_DIR / "trajectory_model_params.json"
+PA_PROJECTIONS_PATH: Path = PROCESSED_DIR / f"pa_projections_{_SEASON_TAG}.parquet"
+CA_PATH: Path = PROCESSED_DIR / f"ca_{_SEASON_TAG}.parquet"
+BACKTEST_RESULTS_PATH: Path = PROCESSED_DIR / "backtest_results.csv"
+BACKTEST_PLAYERS_PATH: Path = PROCESSED_DIR / "backtest_players.csv"
+BACKTEST_SUMMARY_PATH: Path = PROCESSED_DIR / "backtest_summary.md"
+SIMILAR_PLAYERS_PATH: Path = PROCESSED_DIR / f"similar_players_{_SEASON_TAG}.parquet"
+FIGURES_DIR: Path = PROCESSED_DIR / "figures"
+# The Day 2 model (fitted on every player, before the survivorship fix), kept
+# for comparison with the main model.
+TRAJECTORY_ALL_PLAYERS_PARAMS_PATH: Path = PROCESSED_DIR / "trajectory_model_params_all_players.json"
+# Scale factors that widen the projection intervals, estimated on the backtest.
+CALIBRATION_PATH: Path = PROCESSED_DIR / "interval_calibration.json"
+# Players whose Transfermarkt record shows PL minutes before the panel starts.
+TRUNCATION_CHECK_PATH: Path = PROCESSED_DIR / "truncation_check.csv"
+
 
 # ---------------------------------------------------------------------------
 # Cohort and modelling thresholds
@@ -167,6 +188,74 @@ PEAK_AGE_RANGE: tuple[int, int] = (24, 26)
 
 # Seed for anything random, so results can be reproduced.
 RANDOM_SEED: int = 42
+
+
+# ---------------------------------------------------------------------------
+# Trajectory model, projections and backtest
+# ---------------------------------------------------------------------------
+
+# "Age" in every model and window is age on 1 September of the season's first
+# year. Windows such as PEAK_AGE_RANGE use completed years (so "age 24" means
+# 24.0 to 24.99), which gives each player exactly one season per age.
+
+# Once a player has PL minutes, a later season in which he is missing from FPL
+# counts as a minutes share of 0, up to the current season or this age in
+# completed years, whichever comes first.
+ZERO_FILL_MAX_AGE: int = 27
+
+# Age is centred at 21 in the model (age_c = age - 21), so the intercept is the
+# expected minutes share of a 21-year-old.
+MODEL_AGE_CENTRE: float = 21.0
+# Ages (completed years, inclusive) of the seasons the model is fitted on.
+MODEL_AGE_RANGE: tuple[int, int] = (17, 30)
+
+# Monte Carlo draws for projection intervals, and the interval's coverage.
+SIMULATION_DRAWS: int = 2000
+INTERVAL_LEVEL: float = 0.80
+
+# Backtest: forecast origins and the ages (completed years, inclusive) whose
+# mean minutes share is predicted.
+BACKTEST_ORIGINS: tuple[str, ...] = ("2017-18", "2018-19", "2019-20", "2020-21")
+BACKTEST_TARGET_AGES: tuple[int, int] = (23, 25)
+
+# Survivorship fix. The panel starts in 2016-17, so a player first seen in his
+# twenties is only in it because he was still in the league (left truncation).
+# The model is therefore fitted only on players "first seen young": completed
+# age on 1 September of their first PL season with minutes at most this. It is
+# the oldest U21 age, so the model learns from the same kind of player it
+# projects.
+FIRST_SEEN_YOUNG_MAX_AGE: int = U21_AGE_LIMIT - 1  # 20
+# A backtest origin counts as "peak identified" only if the restricted training
+# data has at least this many player-seasons at BACKTEST_TARGET_AGES. With
+# fewer, the curve at those ages is an extrapolation (see docs/day2_log.md).
+PEAK_IDENTIFIED_MIN_SEASONS: int = 50
+# Transfermarkt Premier League seasons (start years) before the panel starts,
+# used only to check how much left truncation remains.
+PRE_PANEL_SEASON_STARTS: tuple[int, ...] = tuple(range(2012, FPL_FIRST_SEASON_START))
+
+# Interval calibration: if the backtest's pooled coverage of the 80% interval
+# is below this, intervals are widened by a factor estimated from past errors.
+CALIBRATION_TRIGGER_COVERAGE: float = 0.70
+
+# Which 80% interval the PA cards show: "raw" (as simulated) or "calibrated"
+# (widened by the backtest factor). Both are always written. "raw" was chosen
+# after seeing the backtest (a post-hoc decision, see docs/day2_log.md): the
+# factor was learnt mostly from origins where the peak was not identified, and
+# the one origin like 2025/26 (2020-21) already had 81% raw coverage.
+CARD_INTERVAL: str = "raw"
+
+# A PA resting on fewer career PL minutes than this is flagged as low evidence
+# and shown greyed out (the same 450 minutes as the per-90 threshold).
+PA_LOW_EVIDENCE_MINUTES: int = MIN_MINUTES_FOR_PER90
+
+
+# ---------------------------------------------------------------------------
+# Similar players (used by src/similarity.py)
+# ---------------------------------------------------------------------------
+
+SIMILAR_PLAYERS_TOP_N: int = 5
+# Historical comparisons: earlier player-seasons within this many years of age.
+HISTORICAL_AGE_WINDOW: float = 1.0
 
 
 # ---------------------------------------------------------------------------
@@ -285,6 +374,15 @@ def summary() -> str:
         f"Minutes share basis:  {MAX_SEASON_MINUTES} minutes ({MATCHES_PER_SEASON} x {MINUTES_PER_MATCH})",
         f"Attribute scale:      {ATTRIBUTE_MIN} to {ATTRIBUTE_MAX}",
         f"Peak age range:       {PEAK_AGE_RANGE[0]} to {PEAK_AGE_RANGE[1]}",
+        f"Model ages:           {MODEL_AGE_RANGE[0]} to {MODEL_AGE_RANGE[1]}, centred at {MODEL_AGE_CENTRE:g}",
+        f"Zero-fill up to age:  {ZERO_FILL_MAX_AGE}",
+        f"Simulation:           {SIMULATION_DRAWS} draws, {INTERVAL_LEVEL:.0%} intervals",
+        f"Backtest origins:     {', '.join(BACKTEST_ORIGINS)} (target ages "
+        f"{BACKTEST_TARGET_AGES[0]} to {BACKTEST_TARGET_AGES[1]})",
+        f"Model fitted on:      players first seen at {FIRST_SEEN_YOUNG_MAX_AGE} or under",
+        f"Peak identified if:   {PEAK_IDENTIFIED_MIN_SEASONS}+ training seasons at the target ages",
+        f"Calibrate if:         pooled 80% coverage below {CALIBRATION_TRIGGER_COVERAGE:.0%}",
+        f"PA cards show:        the {CARD_INTERVAL} 80% interval; low evidence under {PA_LOW_EVIDENCE_MINUTES} PL minutes",
         f"FPL files per season: {', '.join(FPL_SEASON_FILES)}",
         f"Transfermarkt tables: {', '.join(TRANSFERMARKT_TABLES)}",
         f"Example FPL URL:      {fpl_url(CURRENT_SEASON, FPL_SEASON_FILES[1])}",

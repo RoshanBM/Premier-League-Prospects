@@ -105,7 +105,6 @@ Limits of this approach:
 ## Repository layout
 
 ```
-├── CLAUDE.md                the project brief for Claude Code
 ├── README.md
 ├── requirements.txt
 ├── pytest.ini               test settings

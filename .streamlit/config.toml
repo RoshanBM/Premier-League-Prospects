@@ -1,0 +1,16 @@
+# Streamlit settings for app/streamlit_app.py.
+#
+# The theme is fixed to light so the app matches its charts: the Matplotlib
+# pizza and the Plotly trajectory charts use the light palette in
+# src/figures.py. Colours: series 1 blue, the chart surface and primary ink.
+
+[theme]
+base = "light"
+primaryColor = "#2a78d6"
+backgroundColor = "#fcfcfb"
+secondaryBackgroundColor = "#f0efec"
+textColor = "#0b0b0b"
+
+[browser]
+# Do not send usage statistics to Streamlit.
+gatherUsageStats = false

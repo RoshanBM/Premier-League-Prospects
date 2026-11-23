@@ -130,7 +130,8 @@ def subtitle_for(projection: pd.Series) -> str:
     return (f"{projection['pa_range_text']}.<br>PA {projection['pa']} ({projection['pa_label']}), "
             f"{projection['pa_status']}{evidence}.<br>Projected peak {projection['peak_median_display']:.2f}; "
             f"mean share so far {projection['persistence_share']:.2f}; {int(projection['pl_minutes_to_date'])} PL "
-            f"minutes; {int(projection['history_seasons'])} season(s) inform his own curve. Values clipped to 0 to 1.")
+            f"minutes; {int(projection['history_seasons'])} season(s) inform the player's own curve. Values clipped "
+            f"to 0 to 1.")
 
 
 def trajectory_figure(model: TrajectoryModel, panel: pd.DataFrame, pa: pd.DataFrame, code: int,

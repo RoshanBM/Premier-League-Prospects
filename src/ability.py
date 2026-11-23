@@ -60,8 +60,17 @@ PA
       playing regularly in the PL to about X% of league minutes at 24 to 26",
       because dropping out is a real outcome.
 
-Writes data/processed/ca_2025_26.parquet and
-data/processed/pa_projections_2025_26.parquet.
+CA against PA
+    Because they measure different things, the module also writes how far
+    they agree: the Spearman rank correlation between CA and the card's PA
+    for every 2025/26 U21 who has both (450+ minutes this season and a
+    projection), with an approximate 95% interval (Fisher z with the
+    Fieller, Hartley and Pearson variance 1.06 / (n - 3)), and the same
+    correlation with the projected median share as a check.
+
+Writes data/processed/ca_2025_26.parquet,
+data/processed/pa_projections_2025_26.parquet and
+data/processed/ca_pa_correlation_2025_26.json.
 
 Run from the repository root, after python -m src.features, python -m src.trajectory
 and python -m src.validate (which writes the calibration factor):
@@ -70,8 +79,10 @@ and python -m src.validate (which writes the calibration factor):
 
 from __future__ import annotations
 
+import json
 import sys
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 import numpy as np
 import pandas as pd
@@ -82,6 +93,7 @@ from src.cohort import build_cohort, season_players
 from src.features import ATTRIBUTES, attribute_score, mid_rank_percentile
 from src.panel import first_seen_young, read_panel
 from src.trajectory import TrajectoryModel, future_targets, load_model, model_rows, project
+from src.validate import spearman
 
 PA_STATUS_EXPERIMENTAL: str = "experimental"
 PA_STATUS_TOO_YOUNG: str = f"insufficient data: debut before {config.MODEL_AGE_RANGE[0]}"
@@ -481,6 +493,78 @@ def finish_pa(table: pd.DataFrame, references: dict[str, pd.DataFrame], factor: 
 
 
 # ---------------------------------------------------------------------------
+# CA against PA: how far they agree
+# ---------------------------------------------------------------------------
+
+# Approximate variance of Fisher's z for a Spearman correlation (Fieller, Hartley and Pearson, 1957).
+SPEARMAN_Z_VARIANCE_FACTOR: float = 1.06
+Z_95: float = 1.959964
+
+
+def spearman_interval(rho: float, n: int, level_z: float = Z_95) -> tuple[float, float]:
+    """Approximate 95% interval for a Spearman correlation: Fisher z with variance 1.06 / (n - 3).
+
+    Returns (nan, nan) for n of 4 or fewer, or a correlation of -1 or 1 (within
+    floating-point error), where Fisher's z is infinite.
+    """
+    if n <= 4 or not np.isfinite(rho) or abs(rho) >= 1 - 1e-9:
+        return float("nan"), float("nan")
+    half_width = level_z * np.sqrt(SPEARMAN_Z_VARIANCE_FACTOR / (n - 3))
+    centre = np.arctanh(rho)
+    return float(np.tanh(centre - half_width)), float(np.tanh(centre + half_width))
+
+
+def ca_pa_players(ca: pd.DataFrame, pa: pd.DataFrame) -> pd.DataFrame:
+    """The U21s with both a CA (450+ minutes this season) and a projected PA, one row each."""
+    projected = pa.loc[pa["pa_status"] == PA_STATUS_EXPERIMENTAL,
+                       ["fpl_code", "web_name", "position", "pa", "peak_median_display"]]
+    both = projected.merge(ca[["fpl_code", "ca"]], on="fpl_code", how="inner", validate="one_to_one")
+    both = both.dropna(subset=["ca", "pa"])
+    return both.sort_values("ca", ascending=False, ignore_index=True)
+
+
+def ca_pa_correlation(ca: pd.DataFrame, pa: pd.DataFrame) -> dict:
+    """How far CA and the card's PA agree for the U21s who have both.
+
+    Returns a dictionary ready to write as JSON: the method, who is included,
+    n, the Spearman correlation between CA and PA (the card's 1 to 20 rank)
+    with an approximate 95% interval, the same correlation with the projected
+    median share (PA before it is binned into 1 to 20), and the players.
+    """
+    both = ca_pa_players(ca, pa)
+    n = len(both)
+    rho = spearman(both["ca"].astype(float), both["pa"].astype(float))
+    rho_median = spearman(both["ca"].astype(float), both["peak_median_display"].astype(float))
+    low, high = spearman_interval(rho, n)
+    return {
+        "season": config.CURRENT_SEASON,
+        "correlation": "Spearman rank correlation (Pearson correlation of the ranks; ties get their average rank)",
+        "between": "Current Ability (ca, 1 to 20) and the card's Potential Ability (pa, rank among "
+                   f"{config.CURRENT_SEASON.replace('-', '/')} U21 prospects, 1 to 20)",
+        "players": f"every {config.CURRENT_SEASON.replace('-', '/')} U21 cohort player with both a CA "
+                   f"({config.MIN_MINUTES_FOR_PER90}+ PL minutes this season) and a projected PA",
+        "n": n,
+        "spearman_ca_pa": rho,
+        "interval_95": [low, high],
+        "interval_method": "Fisher z transform with variance 1.06 / (n - 3) (Fieller, Hartley and Pearson, 1957); "
+                           "approximate",
+        "spearman_ca_projected_median": rho_median,
+        "positions": {position: int(count) for position, count in both["position"].value_counts().sort_index().items()},
+        "player_list": [
+            {"fpl_code": int(row.fpl_code), "web_name": str(row.web_name), "position": str(row.position),
+             "ca": round(float(row.ca), 4), "pa": int(row.pa), "peak_median": round(float(row.peak_median_display), 4)}
+            for row in both.itertuples(index=False)
+        ],
+    }
+
+
+def write_ca_pa_correlation(result: dict, path=config.CA_PA_CORRELATION_PATH) -> None:
+    """Write the CA-to-PA correlation as JSON, with the time it was made."""
+    stamped = {"generated": datetime.now(timezone.utc).isoformat(timespec="seconds"), **result}
+    path.write_text(json.dumps(stamped, indent=2), encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
 # Running from the command line
 # ---------------------------------------------------------------------------
 
@@ -539,8 +623,16 @@ def main() -> int:
              "peak_median_display", "pa", "pa_low_evidence", "pa_all_players_median", "pa_young_debutants_median",
              "pa_range_text"]
     print(merged[shown].round(3).to_string(index=False))
+
+    agreement = ca_pa_correlation(ca, pa)
+    write_ca_pa_correlation(agreement)
+    low, high = agreement["interval_95"]
+    print(f"\nCA against PA, {agreement['n']} U21s with both: Spearman {agreement['spearman_ca_pa']:.3f} "
+          f"(approximate 95% interval {low:.2f} to {high:.2f}); with the projected median instead of the "
+          f"1 to 20 rank: {agreement['spearman_ca_projected_median']:.3f}")
     print(f"\nCA written to {config.CA_PATH}")
     print(f"PA written to {config.PA_PROJECTIONS_PATH}")
+    print(f"CA-to-PA correlation written to {config.CA_PA_CORRELATION_PATH}")
     return 0
 
 

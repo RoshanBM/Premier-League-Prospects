@@ -134,6 +134,8 @@ TRAJECTORY_SUMMARY_PATH: Path = PROCESSED_DIR / "trajectory_model_summary.txt"
 TRAJECTORY_PARAMS_PATH: Path = PROCESSED_DIR / "trajectory_model_params.json"
 PA_PROJECTIONS_PATH: Path = PROCESSED_DIR / f"pa_projections_{_SEASON_TAG}.parquet"
 CA_PATH: Path = PROCESSED_DIR / f"ca_{_SEASON_TAG}.parquet"
+# How far CA and PA agree for the U21s who have both (a rank correlation).
+CA_PA_CORRELATION_PATH: Path = PROCESSED_DIR / f"ca_pa_correlation_{_SEASON_TAG}.json"
 BACKTEST_RESULTS_PATH: Path = PROCESSED_DIR / "backtest_results.csv"
 BACKTEST_PLAYERS_PATH: Path = PROCESSED_DIR / "backtest_players.csv"
 BACKTEST_SUMMARY_PATH: Path = PROCESSED_DIR / "backtest_summary.md"

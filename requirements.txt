@@ -21,6 +21,8 @@ scikit-learn==1.9.1      # scaling and nearest neighbours for similar players
 # App and charts
 streamlit==1.67.0
 plotly==7.1.0
+mplsoccer==1.8.1         # pizza chart of the attributes on the player card (added 23 Nov 2026)
+matplotlib==3.11.2       # draws the pizza; imported directly by src/app_charts.py (added 23 Nov 2026)
 
 # Reports and tests
 tabulate==0.10.0         # markdown tables in the audit report (pandas to_markdown)

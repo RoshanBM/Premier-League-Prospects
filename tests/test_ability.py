@@ -418,3 +418,73 @@ def test_real_card_fields_and_sensitivity_columns(real_pa):
         columns = [f"pa_{name}_median", f"pa_{name}_lower", f"pa_{name}_upper"]
         assert pa[columns].notna().all().all()
         assert pa[columns].stack().between(config.ATTRIBUTE_MIN, config.ATTRIBUTE_MAX).all()
+
+
+# ---------------------------------------------------------------------------
+# CA against PA
+# ---------------------------------------------------------------------------
+
+def toy_ca_pa() -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Six U21s: five projected with a CA, one projected without a CA, one under 17 with a CA but no PA."""
+    pa = pd.DataFrame({
+        "fpl_code": [1, 2, 3, 4, 5, 6, 7], "web_name": list("ABCDEFG"), "position": ["DEF"] * 3 + ["MID"] * 4,
+        "pa": pd.array([20, 15, 10, 5, 1, 12, pd.NA], dtype="Int64"),
+        "peak_median_display": [0.6, 0.4, 0.3, 0.1, 0.0, 0.35, np.nan],
+        "pa_status": [PA_STATUS_EXPERIMENTAL] * 6 + [PA_STATUS_TOO_YOUNG],
+    })
+    ca = pd.DataFrame({"fpl_code": [1, 2, 3, 4, 5, 7], "ca": [14.0, 12.0, 11.0, 9.0, 8.0, 13.0]})
+    return ca, pa
+
+
+def test_ca_pa_players_need_both_a_ca_and_a_projection():
+    ca, pa = toy_ca_pa()
+    from src.ability import ca_pa_players
+
+    assert sorted(ca_pa_players(ca, pa)["fpl_code"]) == [1, 2, 3, 4, 5]
+
+
+def test_ca_pa_correlation_on_a_perfect_ordering():
+    ca, pa = toy_ca_pa()
+    from src.ability import ca_pa_correlation
+
+    result = ca_pa_correlation(ca, pa)
+    assert result["n"] == 5
+    assert result["spearman_ca_pa"] == pytest.approx(1.0)
+    assert result["spearman_ca_projected_median"] == pytest.approx(1.0)
+    assert math.isnan(result["interval_95"][0])  # no interval at a correlation of exactly 1
+    assert "Spearman" in result["correlation"] and result["positions"] == {"DEF": 3, "MID": 2}
+    assert [p["fpl_code"] for p in result["player_list"]] == [1, 2, 3, 4, 5]
+
+
+def test_ca_pa_correlation_on_a_reversed_ordering():
+    ca, pa = toy_ca_pa()
+    from src.ability import ca_pa_correlation
+
+    reversed_ca = ca.assign(ca=-ca["ca"])
+    assert ca_pa_correlation(reversed_ca, pa)["spearman_ca_pa"] == pytest.approx(-1.0)
+
+
+def test_spearman_interval_contains_the_estimate_and_narrows_with_n():
+    from src.ability import spearman_interval
+
+    low, high = spearman_interval(0.2, 31)
+    assert low < 0.2 < high
+    # Fisher z with variance 1.06 / (n - 3): half-width 1.96 x sqrt(1.06 / 28) on the z scale.
+    assert np.arctanh(high) - np.arctanh(0.2) == pytest.approx(1.959964 * math.sqrt(1.06 / 28))
+    wide, narrow = spearman_interval(0.2, 20), spearman_interval(0.2, 200)
+    assert (narrow[1] - narrow[0]) < (wide[1] - wide[0])
+    assert all(math.isnan(v) for v in spearman_interval(0.2, 4))
+
+
+def test_real_ca_pa_correlation_file_matches_the_tables(real_pa):
+    import json
+
+    if not config.CA_PA_CORRELATION_PATH.exists() or not config.CA_PATH.exists():
+        pytest.skip("CA-to-PA correlation not built (python -m src.ability)")
+    from src.ability import ca_pa_correlation
+
+    saved = json.loads(config.CA_PA_CORRELATION_PATH.read_text(encoding="utf-8"))
+    fresh = ca_pa_correlation(pd.read_parquet(config.CA_PATH), real_pa)
+    assert saved["n"] == fresh["n"] == len(saved["player_list"])
+    assert saved["spearman_ca_pa"] == pytest.approx(fresh["spearman_ca_pa"])
+    assert saved["interval_95"][0] <= saved["spearman_ca_pa"] <= saved["interval_95"][1]

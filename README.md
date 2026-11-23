@@ -1,150 +1,230 @@
-# Premier League U21 Prospects Scout
+# Premier League U21 Prospects
 
-A Football Manager-style scouting tool for Premier League players aged under 21. It uses open data to build player cards (1 to 20 attributes, a Current Ability score and a Potential Ability range), development trajectories and similar-player comparisons, presented in a Streamlit app.
+A Football Manager-style scouting tool for Premier League players aged under 21, built on open data. It rates what each young player did in 2025/26, projects how much Premier League football they might play in their mid-twenties, and tests that projection honestly against what happened to earlier cohorts.
 
-This is a non-commercial portfolio project and a work in progress. The sections below will grow as each part is built.
+This is a non-commercial portfolio project. All data stays local, and the app runs on your own machine only (see [How to run it](#8-how-to-run-it)).
 
-## Setting up
+**Demo video:** <!-- TODO: demo video link -->
 
-Developed with Python 3.14 on Windows.
+## 1. The question
+
+Which young players with Premier League minutes look strongest now, and how might they develop? The tool answers the first part with per-90 ratings against the whole league, and the second with a statistical age curve of Premier League minutes. Both come with plain statements of what the data cannot tell you.
+
+## 2. What the tool shows
+
+A Streamlit app with five pages. It covers the 89 players who were under 21 on 1 September 2025 and played Premier League minutes in 2025/26, and can also show any other player with minutes that season.
+
+| Page | What it shows |
+| --- | --- |
+| **Shortlist** | A table you can filter by age, position, minutes, Current Ability and "hide low-evidence projections", sorted by Current Ability (or by the Potential Ability rank, with a note that it is experimental). Click a row to open the card. |
+| **Player card** | 1 to 20 attributes as a pizza chart and a table, Current Ability with each attribute's contribution, Potential Ability with its range in words, and a short scouting report. |
+| **Trajectory** | The player's Premier League minutes share by age so far, the projection to age 26 with an 80% band, and the average curve for the position. |
+| **Similar players** | The five most similar current players, and the five most similar earlier players at the same age, with what those players went on to play at 24 to 26. |
+| **About the method** | This page's method and backtest in brief, with the numbers read from the backtest file. |
+
+**Attributes (1 to 20).** Finishing, Shot Threat, Chance Creation, Defending and Ball Recovery for outfield players, and Goalkeeping for goalkeepers: the only ones the open data supports for 2025/26.
+
+<!-- TODO: screenshot of the player card attributes (pizza and table) -->
+
+**Current Ability (CA).** A weighted average of the attributes, shown with what each attribute contributes.
+
+<!-- TODO: screenshot of the Current Ability tile and contribution bar -->
+
+**Potential Ability (PA).** A rank from 1 to 20 among this season's U21 prospects, based on projected minutes at ages 24 to 26, with an 80% range in words and the player's minutes share so far beside it. It is labelled experimental, and greyed out when it rests on fewer than 450 career minutes.
+
+<!-- TODO: screenshot of the Potential Ability section, one normal and one low-evidence -->
+
+**Trajectory.** An interactive chart of the seasons so far and the projection.
+
+<!-- TODO: screenshot of a trajectory chart -->
+
+**Similar players.** Current and historical comparisons with similarity scores.
+
+<!-- TODO: screenshot of the similar players page -->
+
+**Scouting report.** Three to five plain sentences written by fixed rules from the numbers on the card, not by a language model. For example, for Lewis Hall:
+
+> Lewis Hall (Newcastle) is a defender, aged 20 on 1 September 2025, with 2,176 Premier League minutes in 2025/26. Current Ability is 13.2 on the 1 to 20 scale, 22nd of 147 defenders with at least 450 minutes. The strongest attributes are Ball Recovery (20) and Chance Creation (15); the weakest are Shot Threat and Defending (both 9). Potential Ability (experimental) is 20 on a 1 to 20 rank among 2025/26 U21 prospects; projected to play about 30% to 85% of league minutes at 24 to 26. The closest current statistical profile at the same position is Antonee Robinson (Fulham, similarity 0.87).
+
+<!-- TODO: screenshot of the scouting report -->
+
+## 3. How it works, in plain English
+
+**From numbers to 1 to 20 ratings.** For every player with at least 450 Premier League minutes in 2025/26, each season total becomes a per-90 figure (goals, expected goals, assists, tackles plus clearances, blocks and interceptions, and so on). Each per-90 figure is compared with every Premier League player in the same position with 450+ minutes, not only under-21s, so a rating is absolute, as in Football Manager. The percentile becomes a rating with `1 + floor(percentile x 20)`, capped at 20: a 15 means better than about 70% of the league at that position. An attribute with two inputs averages their percentiles. The comparison groups are 28 goalkeepers, 147 defenders, 181 midfielders and 44 forwards.
+
+**Current Ability.** A weighted average of the attributes, with weights chosen by hand for each position and a reason for each one. For example, a defender's CA is 40% Defending, 25% Ball Recovery, 15% Chance Creation and 10% each for Shot Threat and Finishing. The card shows each attribute's contribution, so nothing is hidden. CA measures output per 90 minutes, not how much a player played.
+
+| Position | Weights |
+| --- | --- |
+| Goalkeeper | Goalkeeping 1.00 |
+| Defender | Defending .40, Ball Recovery .25, Chance Creation .15, Shot Threat .10, Finishing .10 |
+| Midfielder | Chance Creation .30, Ball Recovery .25, Defending .15, Shot Threat .15, Finishing .15 |
+| Forward | Shot Threat .35, Finishing .30, Chance Creation .20, Ball Recovery .10, Defending .05 |
+
+**The age curve.** The outcome is **minutes share**: a player's Premier League minutes in a season divided by 3,420 (38 matches of 90 minutes). A season out of the league counts as 0. A mixed-effects model (statsmodels MixedLM) fits an average curve of minutes share against age and age squared, shifted by position, plus a personal adjustment for each player: their own level and their own rate of change. With one or two seasons of history, a player's own record is trusted only partly and the rest comes from the average. One bright half-season does not make a projection.
+
+**Why the model only learns from players first seen young.** The data starts in 2016-17. A player who was already 25 then is only in the data because they were still in the league at 25; everyone their age who had dropped out is invisible. A model that learns from those survivors expects far too much of young players. So the model is fitted only on players whose first Premier League season with minutes came at 20 or under: 2,680 seasons from 515 players (`trajectory_model_summary.txt`). For them the data sees the whole story, including dropping out.
+
+**Potential Ability as a rank.** For each U21, the model simulates 2,000 possible futures and takes the middle value of their average minutes share at ages 24 to 26. PA ranks that value against the 84 other projected U21s this season, all positions together, on the same 1 to 20 scale. It is a comparison between this season's prospects, not a rating against the whole league.
+
+**Uncertainty.** Every projection has an 80% range (the 10th to 90th percentile of the simulated futures), written in words, for example "Range: from not playing regularly in the PL to about 45% of league minutes at 24 to 26". Most ranges start at zero. That is partly the real chance of dropping out of the league and partly a side effect of how the model works (see [Limitations](#6-limitations)). A PA based on fewer than 450 career Premier League minutes is greyed out as low evidence (49 of 85 players). Players whose seasons so far all came before age 17 get no PA (4 players).
+
+## 4. Does it work? The backtest
+
+**The verdict: the model does not beat the simple "minutes so far" baseline on average error. Fitting it only on players first seen young cut its over-prediction by more than half, but that was not enough.**
+
+The test went back to four earlier seasons (2017-18 to 2020-21), refitted the model using only what was known at the time, and predicted how much each season's under-21s would play at ages 23 to 25. That made 242 forecasts, compared with what actually happened and with two simple baselines:
+- **minutes so far (persistence):** the player's average minutes share up to that season;
+- **average curve only:** the position's average curve, ignoring the player's own record.
+
+Only 2020-21 had enough seasons at ages 23 to 25 in the training data to check the peak (78 seasons; the threshold set in advance was 50). The earlier origins extrapolate the curve. Results from `data/processed/backtest_results.csv` (errors are in shares of league minutes, so 0.10 is 10 percentage points):
+
+| Test set | Method | Forecasts | Average error (MAE) | Ranking (Spearman) | Bias |
+| --- | --- | --- | --- | --- | --- |
+| 2020-21 (peak checked) | Model, fitted on players first seen young | 64 | 0.232 | 0.419 | +0.096 |
+| 2020-21 (peak checked) | Minutes so far | 64 | **0.193** | 0.375 | -0.033 |
+| 2020-21 (peak checked) | Average curve only | 64 | 0.241 | 0.027 | +0.026 |
+| All four origins | Model, fitted on players first seen young | 242 | 0.244 | 0.287 | +0.070 |
+| All four origins | First model, fitted on all players | 242 | 0.280 | 0.297 | +0.159 |
+| All four origins | Minutes so far | 242 | **0.214** | 0.314 | -0.071 |
+| All four origins | Average curve only | 242 | 0.256 | -0.016 | +0.032 |
+
+What this means:
+- **Minutes so far wins on average error** at the checked origin (0.193 against 0.232) and over all four (0.214 against 0.244).
+- **The fix helped.** Restricting the model to players first seen young cut the average over-prediction from +0.159 to +0.070 and lowered the error at every origin.
+- **Ranking is close.** At 2020-21 the model ranked players slightly better than minutes so far (Spearman 0.419 against 0.375), but that is one season and 64 players.
+- **Ranges are roughly right where the peak is checked.** The 80% range held the real outcome 81.2% of the time at 2020-21, but 65.7% over all four origins. A widening factor of 1.43 was estimated from those errors (`interval_calibration.json`). The cards use the unwidened range, a choice made after seeing these results and kept in the data as a check.
+
+**Why it matters.** A projection that cannot beat "how much has the player played so far" should not drive decisions on its own. That is why the card shows PA as experimental, right next to the minutes share so far.
+
+**What would improve it:**
+- extending the history back to 2012/13 with Transfermarkt Premier League appearances, so the peak can be tested at more origins and the misclassified early debutants come back;
+- adding minutes so far (or last season's share) as a predictor, or a two-part model: first the chance of playing in the league at all, then the share given that they do;
+- more seasons, which arrive one a year.
+
+## 5. Three insights
+
+1. **Survivors make the late twenties look better than they are.** At ages 24 to 26, players first seen at 20 or under averaged a minutes share of **0.164**, against **0.312** for players first seen older (`backtest_summary.md`, diagnostic table, 2,320 player-seasons). The older group is in the data only because they were still in the league when it starts in 2016-17. A model that learns from everyone therefore expects far too much of today's young players, which is why this one learns only from players first seen young.
+2. **Averaged over everyone who broke through young, minutes peak early and low.** This is an average, not a typical career. The curve averages the minutes share of every player first seen at 20 or under, including those who later left the league and count as 0 from then on. That average peaks at age **22.8**, where a defender plays about **19%** of league minutes (0.194 at 23). Individual players sit above or below it. The same model fitted on all players, survivors included, puts the average peak at **24.5**, with a defender at **0.351** of league minutes at 24 (`trajectory_model_summary.txt`).
+3. **Most young players have too few minutes to rate yet.** Only **31 of the 89** U21s with 2025/26 Premier League minutes reached 450 minutes, the threshold for per-90 ratings. The 89 is the row count of `u21_cohort_2025_26.csv`, and the 31 are its rows with `minutes` of 450 or more; the same 31 have `enough_minutes` in `u21_cards_2025_26.parquet`. For those 31 players (13 defenders, 15 midfielders, 3 forwards), the Spearman rank correlation between Current Ability and the Potential Ability rank is **0.20**, with an approximate 95% interval from **-0.18 to 0.52** (`ca_pa_correlation_2025_26.json`; 0.19 using the projected minutes share instead of the rank). The interval includes both no relationship and a moderate one, so **we can't yet say whether current quality predicts future minutes**. Two notes:
+   - PA is a projection of minutes, not minutes actually played, so a real test needs these players' future seasons.
+   - The PA model uses only minutes so far, age and position, never per-90 output, so the two scores come from separate data.
+
+   Until then, the card shows CA and PA side by side and never combines them.
+
+## 6. Limitations
+
+**Data coverage**
+- Only players who have already played Premier League minutes are covered. There is no academy or youth-league data (survivorship).
+- There is no Championship or other EFL data, and no player minutes for 17 other leagues in the Transfermarkt dataset, so a loan there looks like time out of the league.
+- The attribute set is limited. Open sources have no passing, progression, dribbling, aerial or pressing data for recent Premier League seasons, so there are no ratings for them.
+- Defensive stats exist only from 2025/26, so the trajectories model minutes, not output.
+- Per-90 numbers are noisy for players with few minutes, and FPL has only four positions (a holding midfielder is compared with attacking midfielders).
+- Minutes and output depend on club, manager, role and competition for places, not just ability.
+
+**The model**
+- **Left truncation.** The data starts in 2016-17, so the model is fitted only on players first seen at 20 or under. At least 75 players who did debut young before 2016-17 are wrongly counted as "first seen older" and left out (`truncation_check.csv`; a lower bound, because Transfermarkt misses some seasons).
+- **The peak was tested at one origin only** (2020-21, 64 forecasts, with no training season at age 25).
+- **A Gaussian model on a zero-heavy outcome.** Half the seasons the model learns from are zeros, and minutes share cannot go below 0 or above 1. The model ignores both facts, so it can predict impossible values. They are clipped to 0% to 100% for display (3 raw middle values were below 0).
+- **Most ranges start at zero, partly because of the model.** For **76 of 85** projected U21s the 80% range starts at 0%; the most common card reads "from not playing regularly in the PL to about 45% of league minutes at 24 to 26" (22 players) (`pa_projections_2025_26.parquet`). Dropping out of the league is a real outcome, but this count is partly an artefact of the Gaussian model. Its simulated futures spread evenly either side of the middle, so for most prospects the lower end falls below zero and is cut to 0% (74 of 85 raw lower bounds). A two-part model, with the chance of playing in the league at all and then the share given that, would put a direct number on dropping out instead.
+- **Wide ranges.** The median 80% range spans 0.66 of league minutes before clipping. The ranges from the 2025/26 fit were not tested directly; the backtest suggests they are about right where the peak is identified and too narrow elsewhere.
+- **The model does not beat "minutes so far"** on average error in the backtest, so PA is experimental.
+
+**How PA is shown**
+- **PA is relative to this season's prospects**, all positions together. The model expects fewer minutes for young forwards, so forwards rank lower on average (mean PA 8.0 for forwards, 13.0 for defenders).
+- **Low evidence:** 49 of 85 projections rest on fewer than 450 career minutes and mostly reflect the average curve. They are greyed out.
+- **No PA for under-17 debutants** (4 players), because the model is not fitted below 17.
+- **CA and PA measure different things:** CA is this season's output per 90 minutes; PA is projected minutes. A player can be high on one and low on the other (rank correlation 0.20 among the 31 U21s with both, `ca_pa_correlation_2025_26.json`).
+- "Potential" here is a statistical projection with wide uncertainty, not a verdict on a player.
+
+## 7. Data sources and terms
+
+No data is included in this repository. The pipeline downloads it into `data/`, which is gitignored apart from `data/manual_matches.csv`, a small file of hand-made matching fixes. Raw data is never redistributed.
+
+| Source | Used for | Terms |
+| --- | --- | --- |
+| **Fantasy Premier League**, via the [vaastav/Fantasy-Premier-League](https://github.com/vaastav/Fantasy-Premier-League) archive | Minutes, goals, expected goals and assists, defensive actions, positions and birth dates, 2016-17 to 2025-26 | The archive's code is MIT licensed; the data belongs to the Premier League, whose terms allow private, non-commercial use and prohibit commercial use. |
+| **Transfermarkt**, via [dcaribou/transfermarkt-datasets](https://github.com/dcaribou/transfermarkt-datasets) (Kaggle: `davidcariboo/player-scores`) | Birth dates for seasons before 2024-25, matching players across seasons, and checks on minutes and truncation | The repository is CC0, but the data was collected from Transfermarkt, so it is used for non-commercial purposes only. Credit to Transfermarkt and the dataset's author. |
+
+StatsBomb Open Data is not used yet. It is planned for a separate event-data module (see [Next steps](#10-next-steps)) under the StatsBomb Public Data User Agreement. Please check each source's terms yourself before reusing anything from this project.
+
+## 8. How to run it
+
+Developed with Python 3.14 on Windows. Run everything from the repository root.
 
 ```powershell
+# 1. Set up the environment
 python -m venv .venv
-.venv\Scripts\Activate.ps1        # Windows PowerShell (macOS or Linux: source .venv/bin/activate)
-pip install -r requirements.txt
-```
+.venv\Scripts\Activate.ps1          # macOS or Linux: source .venv/bin/activate
+pip install -r requirements.txt     # or, for the exact tested environment: pip install -r requirements-lock.txt
 
-Run everything from the repository root. To check the configuration:
+# 2. Download the data and build everything (about 108 MB of downloads, about 2 minutes of processing)
+python run_pipeline.py
 
-```powershell
-python -m src.config
-```
+# 3. Open the app
+streamlit run app/streamlit_app.py
 
-## Getting the data
-
-```powershell
-python -m src.load_data           # downloads about 108 MB; files already present are skipped
-python -m src.load_data --force   # downloads everything again
-```
-
-This fetches FPL `players_raw.csv` and `gws/merged_gw.csv` for 2016-17 to 2025-26, plus six Transfermarkt tables, into `data/raw/`. Use `--source fpl` or `--source transfermarkt` to fetch one source only. Each file is recorded in `data/raw/manifest.json` with its source URL, download time, size and SHA-256. If the Transfermarkt download fails, the script prints instructions for getting the same tables from Kaggle by hand.
-
-To check the downloaded files:
-
-```powershell
-python -m src.audit
-```
-
-This writes `data/processed/audit_report.md`. It compares the data with what this project assumes about it, and lists duplicates and other anomalies.
-
-To match FPL players to Transfermarkt players:
-
-```powershell
-python -m src.matching
-```
-
-This writes `data/processed/fpl_tm_matches.csv` (one row per matched player), `data/processed/unmatched_report.csv` (everyone else, with the closest Transfermarkt names) and `data/processed/matching_report.md` (match rates and checks). Hand-made fixes go in `data/manual_matches.csv`: one row per FPL `code`, with a Transfermarkt `player_id` to force a match, or a blank one to force no match.
-
-To build the U21 cohort of a season (players aged under 21 on 1 September at the start of the season who played Premier League minutes in it):
-
-```powershell
-python -m src.cohort                    # 2025/26: under 21 on 1 September 2025
-python -m src.cohort --season 2018-19   # an earlier season: under 21 on 1 September 2018
-```
-
-This writes `data/processed/u21_cohort_2025_26.csv` (or the other season's file) and prints the counts. Age is in completed years, so a player born on 1 September 2004 is 21 on the 2025/26 cut-off date and not in the cohort. `--cutoff YYYY-MM-DD` measures age on a different date. For an earlier season, minutes and positions come from that season's files only. Birth dates come from later files where needed, which is safe because a birth date does not change.
-
-To work out per-90 stats and attributes:
-
-```powershell
-python -m src.features
-```
-
-This writes `data/processed/player_season_2025_26.parquet` (every player in the 2025/26 season) and `data/processed/u21_cards_2025_26.parquet` (the U21 cohort). To print players' cards, with the numbers behind each attribute:
-
-```powershell
-python -m src.features --show Diouf Estêvão Kroupi
-```
-
-## Running the tests
-
-```powershell
+# 4. Run the tests
 python -m pytest
 ```
 
-The tests cover the per-90 arithmetic, the 1 to 20 mapping (its bounds, that it never goes down as a percentile rises, and exact boundaries), the U21 age rule around 1 September 2025, and that there is one row per player per season. Tests that check the real data files skip themselves if the data has not been downloaded and processed yet.
+- `python run_pipeline.py` runs eleven stages in order: load, audit, matching, cohort, features, panel, trajectory, validate, ability, similarity, figures. It prints one line per stage with its time and writes each stage's own output to `data/processed/pipeline_log.txt`.
+  - `--skip-download` uses the raw files already in `data/raw/`.
+  - `--from STAGE` resumes from a stage, for example `--from trajectory`.
+  - `--verbose` shows each stage's output on screen.
+- If the Transfermarkt download fails, the load stage prints instructions for getting the same tables from Kaggle by hand.
+- Each stage can also be run on its own, for example `python -m src.audit` or `python -m src.features --show Diouf Kroupi`. `python -m src.report_text Hall Oriola` prints scouting reports.
+- The app reads only `data/processed/`. If the files are not there, it says to run the pipeline. A player's page can be bookmarked: the address names the page and the player's FPL code, for example `?page=Player+card&player=487838`.
 
-## How the attributes are calculated
+**Two requirements files.**
+- `requirements.txt` lists the direct dependencies, each pinned.
+- `requirements-lock.txt` is the output of `pip freeze` from the tested environment (Python 3.14.6 on Windows). It pins every installed package, including the ones the direct dependencies pull in, so use it to reproduce the environment exactly.
 
-Every player with at least 450 Premier League minutes in 2025/26 gets Football Manager-style attributes on a 1 to 20 scale. Players with fewer minutes are listed without attributes, because per-90 numbers from a handful of appearances are too noisy.
+**Running locally only.** The app is meant to run on your own machine and is not hosted anywhere. Hosting it, for example on Streamlit Community Cloud, would mean publishing the processed tables it reads. That would redistribute data derived from FPL and Transfermarkt, which this project's use of both sources rules out. The demo video at the top of this page shows the app instead.
 
-| Attribute | Who gets it | Inputs (per 90 minutes) |
-| --- | --- | --- |
-| Finishing | outfield players | goals; goals minus expected goals (xG) |
-| Shot Threat | outfield players | expected goals (xG) |
-| Chance Creation | outfield players | expected assists (xA); assists |
-| Defending | outfield players | tackles plus clearances, blocks and interceptions |
-| Ball Recovery | outfield players | recoveries |
-| Goalkeeping | goalkeepers | saves; expected goals conceded minus goals conceded |
-
-How a season total becomes an attribute:
-
-1. **Per 90:** the season total divided by minutes played, times 90.
-2. **Percentile within position:** the player is compared with every Premier League player in the same FPL position (goalkeeper, defender, midfielder or forward) who also played at least 450 minutes, not only with under-21s. Ratings are therefore absolute, as in Football Manager: a 15 means better than about 70% of the league's players in that position this season. The percentile is the share of the group below the player plus half the share level with them, so players with the same number get the same percentile. In 2025/26 the groups are 28 goalkeepers, 147 defenders, 181 midfielders and 44 forwards.
-3. **Attribute:** 1 + (percentile x 20, rounded down), capped at 20. The bottom 5% of a group get 1 and the top 5% get 20.
-4. **Two inputs:** the attribute uses the average of the two percentiles.
-
-Limits of this approach:
-
-- Passing, progression, dribbling, aerial ability and pressing are not in any open data source for recent Premier League seasons, so there are no attributes for them.
-- FPL has only four positions, so a holding midfielder is compared with attacking midfielders, and a winger that FPL lists as a forward is compared with strikers.
-- Attributes are relative to this season's Premier League players, and 450 minutes (five full matches) is still a small sample.
-- Saves per 90 partly reflects how busy a goalkeeper is, not only how good.
-- Many players share the same small totals (most defenders score no goals), which bunches them on the same attribute value.
-
-## Repository layout
+## 9. Repository structure
 
 ```
 ├── README.md
-├── requirements.txt
-├── pytest.ini               test settings
-├── data/                    gitignored, apart from manual_matches.csv
-│   ├── raw/                 downloaded files (fpl/, transfermarkt/, statsbomb/)
-│   ├── processed/           pipeline outputs
-│   └── manual_matches.csv   hand-made fixes for player matching
+├── requirements.txt           direct dependencies, pinned
+├── requirements-lock.txt      every installed package (pip freeze)
+├── pytest.ini
+├── run_pipeline.py            one command for every stage, in order
+├── .streamlit/config.toml     app theme (light, to match the charts)
+├── app/
+│   └── streamlit_app.py       the app (layout only)
 ├── src/
-│   ├── config.py            paths, seasons, thresholds and URLs
-│   ├── load_data.py         downloads the raw files
-│   ├── audit.py             data-quality checks
-│   ├── clean.py             shared cleaning steps
-│   ├── matching.py          FPL to Transfermarkt player matching
-│   ├── cohort.py            the U21 cohort of any season (who is in the sample)
-│   ├── features.py          per-90 stats, percentiles and attributes
-│   ├── ability.py           Current and Potential Ability
-│   ├── trajectory.py        mixed-effects age-curve model
-│   ├── similarity.py        similar-player comparisons
-│   └── validate.py          backtesting
-├── app/streamlit_app.py     the app
-├── notebooks/               exploration only
-└── tests/
+│   ├── config.py              paths, seasons, thresholds and URLs
+│   ├── load_data.py           downloads the raw files and reads them back
+│   ├── audit.py               data-quality checks and report
+│   ├── clean.py               shared cleaning steps
+│   ├── matching.py            FPL to Transfermarkt player matching
+│   ├── cohort.py              the U21 cohort of any season
+│   ├── features.py            per-90 stats, percentiles and 1 to 20 attributes
+│   ├── panel.py               one row per player per PL season, 2016-17 to 2025-26
+│   ├── trajectory.py          the mixed-effects age curve and projections
+│   ├── calibration.py         widening factors for projection ranges, from the backtest
+│   ├── validate.py            the backtest
+│   ├── ability.py             Current Ability and Potential Ability
+│   ├── similarity.py          current and historical similar players
+│   ├── figures.py             trajectory charts
+│   ├── report_text.py         rule-based scouting reports
+│   ├── app_data.py            data loading and tables for the app
+│   └── app_charts.py          the pizza and Current Ability charts
+├── docs/
+│   └── trajectory_model.md    the age-curve model explained in plain English
+├── data/                      gitignored, apart from manual_matches.csv
+│   ├── raw/                   downloaded files
+│   ├── processed/             pipeline outputs
+│   └── manual_matches.csv     hand-made fixes for player matching
+├── notebooks/                 exploration only
+└── tests/                     pytest suite
 ```
 
-## Data sources and terms
+## 10. Next steps
 
-No data is included in this repository. The pipeline downloads it into `data/`, which is gitignored apart from `data/manual_matches.csv`, a small file of hand-made matching fixes.
-
-- **Fantasy Premier League**, via the [vaastav/Fantasy-Premier-League](https://github.com/vaastav/Fantasy-Premier-League) archive. The archive's code is MIT licensed, but the data belongs to the Premier League, whose terms allow private and personal use and prohibit commercial use. It is used here for a non-commercial project and the raw data is not redistributed.
-- **Transfermarkt**, via [dcaribou/transfermarkt-datasets](https://github.com/dcaribou/transfermarkt-datasets) (also on Kaggle as `davidcariboo/player-scores`). The repository is released under CC0, but the data was collected from Transfermarkt, so it is used for non-commercial purposes only and is not redistributed. Credit to Transfermarkt and to the dataset's author.
-- **StatsBomb Open Data** (planned as a separate module), under the StatsBomb Public Data User Agreement.
-
-Please check each source's terms yourself before reusing anything from this project.
-
-## Known limitations
-
-- Only players who have already played Premier League minutes are covered. There is no academy or youth-league data, so the sample has survivorship bias.
-- There is no Championship or other EFL data, so loan spells in England are invisible.
-- The attribute set is limited: open sources have no passing, progression, dribbling, aerial or pressing data for recent Premier League seasons.
-- Defensive stats only exist from 2025/26, so historical trajectories use minutes and attacking output.
-- Per-90 stats are noisy for players with few minutes.
-- Minutes and output depend on team, manager and role, not just ability.
-- "Potential" is a statistical projection with wide uncertainty, not a verdict on a player.
+- **Transfermarkt back to 2012/13** for Premier League minutes, so "first seen" ages are right for early debutants and the peak can be tested at more origins.
+- **Minutes so far as a predictor, or a two-part model** (in the league or not, then minutes share), judged with the same backtest.
+- **A backtested "chance of becoming a regular"**, for example the probability of playing half the league's minutes at 24 to 26, which may be more useful to a coach than a share.
+- **A StatsBomb event-data module**: event-based attributes and radars on the 2015/16 Premier League and Euro 2024, kept separate from the cards because the stat definitions differ.
+- **A short demo video** of the app, linked at the top of this page, since the app is not hosted.

@@ -295,7 +295,14 @@ def card_attributes(player: pd.Series, data: AppData) -> None:
         figure = pizza_figure(dict(zip(rows["Attribute"], rows["Rating (1 to 20)"])))
         st.pyplot(figure, width="stretch")
         close_figure(figure)
-    st.dataframe(rows, hide_index=True, width="stretch")
+    st.dataframe(rows, hide_index=True, width="stretch", column_config={
+        # Pixel widths: room for the longest attribute name, a narrow rating, the rest for the inputs.
+        "Attribute": st.column_config.TextColumn(width=130),
+        "Rating (1 to 20)": st.column_config.NumberColumn(
+            "Rating", width=60, help=f"1 to 20, against PL players at the same position "
+                                     f"({config.MIN_MINUTES_FOR_PER90}+ minutes)"),
+        "Based on (per 90)": st.column_config.TextColumn(width="large"),
+    })
     st.caption("Passing, progression, dribbling, aerial ability and pressing are not in any open data source for "
                "recent Premier League seasons, so there are no attributes for them.")
 
@@ -331,12 +338,11 @@ def card_potential_ability(player: pd.Series) -> None:
         return
     low = bool(player["pa_low_evidence"])
     stat_tile(f"Potential Ability: {player['pa_label']} (1 to 20)", str(int(player["pa"])), so_far, greyed=low)
-    badges = st.columns([1, 1, 2])
-    with badges[0]:
-        st.badge("Experimental", icon=":material/science:", color="orange")
+    # Both badges on one Markdown line, so a narrow column never cuts their text short.
+    badges = ":orange-badge[:material/science: Experimental]"
     if low:
-        with badges[1]:
-            st.badge("Low evidence", icon=":material/visibility_off:", color="gray")
+        badges += " :gray-badge[:material/visibility_off: Low evidence]"
+    st.markdown(badges)
     st.markdown(f"**{player['pa_range_text']}** (80% range).")
     st.caption(EXPERIMENTAL_NOTE)
     if low:

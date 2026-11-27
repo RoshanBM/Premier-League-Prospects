@@ -100,7 +100,7 @@ def ca_contribution_figure(contributions: pd.DataFrame, ca: float) -> go.Figure:
         font={"color": TEXT_COLOUR, "family": "Segoe UI, Arial, sans-serif"},
         xaxis={"title": "contribution to Current Ability", "gridcolor": GRID_COLOUR, "zeroline": False,
                "range": [0, max(float(contributions["contribution"].max()) * 1.45, 1.0)]},
-        yaxis={"title": None, "automargin": True},
+        yaxis={"title": None, "automargin": True, "ticksuffix": "  "},  # a little space between label and bar
         bargap=0.35, height=70 + 48 * len(contributions), margin={"l": 120, "r": 10, "t": 50, "b": 40},
         showlegend=False,
     )

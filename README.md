@@ -6,6 +6,17 @@ This is a non-commercial portfolio project. All data stays local, and the app ru
 
 **Demo video:** <!-- TODO: demo video link -->
 
+![Player card for Lewis Hall](docs/images/player_card.png)
+
+**At a glance**
+- **Who:** the 89 players who were under 21 on 1 September 2025 and played Premier League minutes in 2025/26.
+- **Now:** 1 to 20 attributes and a Current Ability score for every player with at least 450 minutes, rated against the whole league at the same position.
+- **Later:** a mixed-effects age curve of Premier League minutes projects each U21's share of minutes at ages 24 to 26, with an 80% range, shown as a rank among this season's prospects.
+- **Tested:** a time-split backtest on four earlier seasons. The model does not beat the simple "minutes so far" figure on average error, so the projection is labelled experimental and shown next to it.
+- **Built with:** Python 3.14, pandas, NumPy, statsmodels, Streamlit, Plotly, mplsoccer and pytest, on open Fantasy Premier League and Transfermarkt data.
+
+**Contents:** [The question](#1-the-question) · [What the tool shows](#2-what-the-tool-shows) · [How it works](#3-how-it-works-in-plain-english) · [The backtest](#4-does-it-work-the-backtest) · [Insights](#5-three-insights) · [Limitations](#6-limitations) · [Data and terms](#7-data-sources-and-terms) · [How to run it](#8-how-to-run-it) · [Structure](#9-repository-structure) · [Next steps](#10-next-steps)
+
 ## 1. The question
 
 Which young players with Premier League minutes look strongest now, and how might they develop? The tool answers the first part with per-90 ratings against the whole league, and the second with a statistical age curve of Premier League minutes. Both come with plain statements of what the data cannot tell you.
@@ -22,31 +33,40 @@ A Streamlit app with five pages. It covers the 89 players who were under 21 on 1
 | **Similar players** | The five most similar current players, and the five most similar earlier players at the same age, with what those players went on to play at 24 to 26. |
 | **About the method** | This page's method and backtest in brief, with the numbers read from the backtest file. |
 
-**Attributes (1 to 20).** Finishing, Shot Threat, Chance Creation, Defending and Ball Recovery for outfield players, and Goalkeeping for goalkeepers: the only ones the open data supports for 2025/26.
+The screenshots below come from the app running locally on the 2025/26 data.
 
-<!-- TODO: screenshot of the player card attributes (pizza and table) -->
+### Shortlist
 
-**Current Ability (CA).** A weighted average of the attributes, shown with what each attribute contributes.
+![Shortlist of the 89 U21s, filtered and sorted by Current Ability](docs/images/shortlist.png)
 
-<!-- TODO: screenshot of the Current Ability tile and contribution bar -->
+Filter by age, position, minutes, Current Ability, "U21 only" and "hide low-evidence PA", and sort by Current Ability, the Potential Ability rank or minutes. "Minutes share so far" sits next to the PA rank, so a coach can compare the projection with what has actually happened.
 
-**Potential Ability (PA).** A rank from 1 to 20 among this season's U21 prospects, based on projected minutes at ages 24 to 26, with an 80% range in words and the player's minutes share so far beside it. It is labelled experimental, and greyed out when it rests on fewer than 450 career minutes.
+### Player card
 
-<!-- TODO: screenshot of the Potential Ability section, one normal and one low-evidence -->
+The screenshot at the top of this page is Lewis Hall's card. It has four parts:
 
-**Trajectory.** An interactive chart of the seasons so far and the projection.
+- **Attributes (1 to 20):** Finishing, Shot Threat, Chance Creation, Defending and Ball Recovery for outfield players, and Goalkeeping for goalkeepers, the only ones the open data supports for 2025/26. They are drawn as a pizza chart, with a table of the per-90 numbers behind each rating.
+- **Current Ability (CA):** a weighted average of the attributes, with a bar showing what each attribute contributes (weight x rating).
+- **Potential Ability (PA):** a rank from 1 to 20 among this season's U21 prospects, based on projected minutes at ages 24 to 26. It comes with an 80% range in words, the player's minutes share so far, and an "experimental" tag.
+- **Scouting report:** three to five plain sentences written by fixed rules from the numbers on the card, not by a language model. For Lewis Hall:
 
-<!-- TODO: screenshot of a trajectory chart -->
+  > Lewis Hall (Newcastle) is a defender, aged 20 on 1 September 2025, with 2,176 Premier League minutes in 2025/26. Current Ability is 13.2 on the 1 to 20 scale, 22nd of 147 defenders with at least 450 minutes. The strongest attributes are Ball Recovery (20) and Chance Creation (15); the weakest are Shot Threat and Defending (both 9). Potential Ability (experimental) is 20 on a 1 to 20 rank among 2025/26 U21 prospects; projected to play about 30% to 85% of league minutes at 24 to 26. The closest current statistical profile at the same position is Antonee Robinson (Fulham, similarity 0.87).
 
-**Similar players.** Current and historical comparisons with similarity scores.
+When a projection rests on fewer than 450 career minutes, the rank is greyed out and tagged "Low evidence". Nehemiah Oriola, with 1 career minute, is an example:
 
-<!-- TODO: screenshot of the similar players page -->
+<img src="docs/images/potential_ability_low_evidence.png" alt="Low-evidence Potential Ability for Nehemiah Oriola, greyed out and tagged" width="483">
 
-**Scouting report.** Three to five plain sentences written by fixed rules from the numbers on the card, not by a language model. For example, for Lewis Hall:
+### Trajectory
 
-> Lewis Hall (Newcastle) is a defender, aged 20 on 1 September 2025, with 2,176 Premier League minutes in 2025/26. Current Ability is 13.2 on the 1 to 20 scale, 22nd of 147 defenders with at least 450 minutes. The strongest attributes are Ball Recovery (20) and Chance Creation (15); the weakest are Shot Threat and Defending (both 9). Potential Ability (experimental) is 20 on a 1 to 20 rank among 2025/26 U21 prospects; projected to play about 30% to 85% of league minutes at 24 to 26. The closest current statistical profile at the same position is Antonee Robinson (Fulham, similarity 0.87).
+![Trajectory chart for Lewis Hall: seasons so far, projection to age 26 with an 80% band, and the average defender curve](docs/images/trajectory.png)
 
-<!-- TODO: screenshot of the scouting report -->
+The player's Premier League minutes share by age so far (solid line) is shown alongside the projection to age 26 with an 80% band for each season (shaded). The diamond marks the projected peak, the mean of ages 24 to 26, with its range, and the dashed line is the average curve for the position.
+
+### Similar players
+
+![Similar players for Lewis Hall: five current and five historical matches](docs/images/similar_players.png)
+
+The top table holds the five most similar current players at the same position. The bottom one holds the five most similar earlier players at the same age, with what they went on to play the next season and at 24 to 26. Historical matches use a smaller set of stats, because only those exist for every season since 2016-17.
 
 ## 3. How it works, in plain English
 
@@ -146,6 +166,8 @@ No data is included in this repository. The pipeline downloads it into `data/`, 
 | **Fantasy Premier League**, via the [vaastav/Fantasy-Premier-League](https://github.com/vaastav/Fantasy-Premier-League) archive | Minutes, goals, expected goals and assists, defensive actions, positions and birth dates, 2016-17 to 2025-26 | The archive's code is MIT licensed; the data belongs to the Premier League, whose terms allow private, non-commercial use and prohibit commercial use. |
 | **Transfermarkt**, via [dcaribou/transfermarkt-datasets](https://github.com/dcaribou/transfermarkt-datasets) (Kaggle: `davidcariboo/player-scores`) | Birth dates for seasons before 2024-25, matching players across seasons, and checks on minutes and truncation | The repository is CC0, but the data was collected from Transfermarkt, so it is used for non-commercial purposes only. Credit to Transfermarkt and the dataset's author. |
 
+The screenshots in this README show derived figures for a handful of players, to illustrate the analysis. The tables behind them are not published.
+
 StatsBomb Open Data is not used yet. It is planned for a separate event-data module (see [Next steps](#10-next-steps)) under the StatsBomb Public Data User Agreement. Please check each source's terms yourself before reusing anything from this project.
 
 ## 8. How to run it
@@ -212,7 +234,8 @@ python -m pytest
 │   ├── app_data.py            data loading and tables for the app
 │   └── app_charts.py          the pizza and Current Ability charts
 ├── docs/
-│   └── trajectory_model.md    the age-curve model explained in plain English
+│   ├── trajectory_model.md    the age-curve model explained in plain English
+│   └── images/                screenshots used in this README
 ├── data/                      gitignored, apart from manual_matches.csv
 │   ├── raw/                   downloaded files
 │   ├── processed/             pipeline outputs
